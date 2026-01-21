@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#FF6B6B">
+    <title>BantuJeg - Jasa Titip & Ojek Salatiga</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <style>
+        :root { --primary: #FF6B6B; --secondary: #1D3557; --bg-cream: #FFFBF5; --white: #ffffff; --gray-soft: #f8fafc; --text-mute: #64748b; --radius-box: 24px; --radius-btn: 16px; }
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { font-family: 'Poppins', sans-serif; background-color: var(--bg-cream); color: var(--secondary); min-height: 100vh; padding-bottom: 140px; }
+        
+        .container { max-width: 480px; margin: 0 auto; padding: 24px 20px; }
+        header { margin-bottom: 24px; }
+        .brand { font-size: 1.5rem; font-weight: 800; color: var(--secondary); }
+        .hero-title { font-size: 1.6rem; font-weight: 700; line-height: 1.25; }
+
+        .service-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
+        .service-card { background: var(--white); border-radius: 16px; padding: 16px 8px; text-align: center; cursor: pointer; box-shadow: 0 4px 20px rgba(0,0,0,0.06); transition: all 0.3s; border: 2px solid transparent; }
+        .service-card .icon { font-size: 2rem; display: block; margin-bottom: 5px; } 
+        .service-card .label { font-size: 0.8rem; font-weight: 700; }
+        .service-card.active { border-color: var(--primary); background: #fff0f0; transform: translateY(-2px); }
+
+        #booking-form { display: none; background: var(--white); border-radius: var(--radius-box); padding: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); }
+        
+        /* MINI MAP GRATIS */
+        #mini-map { width: 100%; height: 180px; background: #eee; border-radius: 16px; margin-bottom: 20px; display: none; z-index: 1; border: 1px solid #ddd; }
+
+        .input-group { margin-bottom: 18px; position: relative; }
+        .input-group label { display: block; font-size: 0.75rem; font-weight: 700; color: var(--text-mute); margin-bottom: 8px; text-transform: uppercase; }
+        
+        .input-wrapper { position: relative; width: 100%; }
+        input[type="text"], textarea { width: 100%; padding: 14px 16px; background: var(--gray-soft); border: none; border-radius: var(--radius-btn); font-family: 'Poppins'; font-size: 0.95rem; padding-right: 40px; }
+        
+        /* TOMBOL GPS */
+        .gps-btn { position: absolute; right: 6px; top: 6px; bottom: 6px; background: var(--white); border: 1px solid #e2e8f0; color: var(--primary); border-radius: 12px; padding: 0 12px; font-size: 0.75rem; font-weight: 600; cursor: pointer; display: none; align-items: center; gap: 4px; z-index: 10; }
+        .input-wrapper.has-gps input { padding-right: 120px; }
+
+        /* TOMBOL CLEAR (X) */
+        .clear-btn { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #cbd5e1; font-size: 1.2rem; cursor: pointer; display: none; z-index: 5; }
+        input:not(:placeholder-shown) + .clear-btn { display: block; }
+        .input-wrapper.has-gps input:not(:placeholder-shown) + .clear-btn { right: 110px; }
+
+        #result-area { margin-top: 24px; padding-top: 20px; border-top: 2px dashed #e2e8f0; display: none; }
+        .price-tag { font-size: 1.6rem; font-weight: 800; color: var(--primary); }
+
+        .bottom-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: rgba(255,255,255,0.95); padding: 16px 20px; z-index: 100; border-top: 1px solid #eee; display: flex; justify-content: center; }
+        
+        /* TOMBOL SEBAGAI LINK (ANTI-BLOCK) */
+        .btn-action { text-decoration: none; display: flex; justify-content: center; align-items: center; width: 100%; max-width: 480px; background: var(--secondary); color: rgba(255,255,255,0.6); padding: 16px; border-radius: var(--radius-btn); font-weight: 600; font-size: 1rem; pointer-events: none; transition: all 0.3s; }
+        .btn-action.ready { background: var(--primary); color: white; pointer-events: auto; box-shadow: 0 8px 20px rgba(255, 107, 107, 0.35); }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <div class="brand">BantuJeg.</div>
+            <div class="hero-title">Halo Kak! <br>Mau dibantuin apa?</div>
+        </header>
+
+        <div class="service-grid">
+            <div class="service-card" onclick="selectService('ojek')" id="card-ojek"><span class="icon">🛵</span><div class="label">OJEK</div></div>
+            <div class="service-card" onclick="selectService('jajan')" id="card-jajan"><span class="icon">🍔</span><div class="label">MAKAN</div></div>
+            <div class="service-card" onclick="selectService('belanja')" id="card-belanja"><span class="icon">🛒</span><div class="label">BELANJA</div></div>
+        </div>
+
+        <div id="booking-form">
+            <div id="mini-map"></div>
+
+            <div class="input-group">
+                <label id="lbl-origin">Lokasi Jemput</label>
+                <div class="input-wrapper" id="wrapper-origin">
+                    <input type="text" id="origin" placeholder="Cari lokasi...">
+                    <span class="clear-btn" onclick="clearInput('origin')">×</span>
+                </div>
+            </div>
+
+            <div class="input-group">
+                <label id="lbl-destination">Tujuan Antar</label>
+                <div class="input-wrapper" id="wrapper-destination">
+                    <input type="text" id="destination" placeholder="Cari tujuan...">
+                    <span class="clear-btn" onclick="clearInput('destination')">×</span>
+                </div>
+            </div>
+
+            <button id="btn-gps" class="gps-btn"><span>📍</span> Lokasi Saya</button>
+
+            <div class="input-group">
+                <label>Catatan (Opsional)</label>
+                <div class="input-wrapper">
+                    <input type="text" id="destination-note" oninput="forceUpdateLink()" placeholder="Pagar hitam / Masuk gang...">
+                    <span class="clear-btn" onclick="clearInput('destination-note')">×</span>
+                </div>
+            </div>
+
+            <div class="input-group" id="group-detail" style="display: none;">
+                <label>Detail Pesanan</label>
+                <textarea id="detail-text" oninput="forceUpdateLink()" placeholder="Contoh: Nasi Goreng 2, Pedas..."></textarea>
+            </div>
+
+            <div id="result-area">
+                <div style="font-size: 0.7rem; color: var(--text-mute); text-transform:uppercase;">Estimasi Ongkir (Jalur Pendek)</div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div class="price-tag" id="price-display">Rp 0</div>
+                    <div style="background: #eef2ff; padding: 6px 14px; border-radius: 30px; font-weight: 600; font-size: 0.85rem;" id="dist-display">0 km</div>
+                </div>
+                <div id="error-msg" style="font-size: 0.7rem; color: orange; margin-top: 5px; display: none;">*Pakai jarak garis lurus (GPS Limit)</div>
+            </div>
+        </div>
+        
+        <div style="text-align: center; margin-top: 40px; font-size: 0.65rem; color: #cbd5e1;">SECURED APP v12.0 • SALATIGA</div>
+    </div>
+
+    <div class="bottom-bar">
+        <a id="btn-submit" href="javascript:void(0)" class="btn-action">Pilih Layanan Dulu</a>
+    </div>
+
+    <script src="https://maps.googleapis.com/maps/api/js?key=__GOOGLE_KEY__&libraries=places,geometry&loading=async&v=weekly&callback=initApp" async defer></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        const firebaseConfig = {
+            apiKey: "__FIREBASE_KEY__",
+            authDomain: "tanganbantu-poc.firebaseapp.com",
+            projectId: "tanganbantu-poc",
+            storageBucket: "tanganbantu-poc.firebasestorage.app",
+            messagingSenderId: "236145821183",
+            appId: "1:236145821183:web:c390d511bf9da9a86913ca"
+        };
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        window.logOrder = (payload) => {
+            addDoc(collection(db, "orders"), { ...payload, timestamp: serverTimestamp() }).catch(e => {});
+        };
+    </script>
+
+    <script>
+        const CONFIG = {
+            WA: "62895330091464",
+            BOUNDS: { south: -7.60, west: 110.23, north: -7.06, east: 110.77 }
+        };
+
+        let appState = { service: null, originPlace: null, destPlace: null, price: 0, distance: 0, orderId: "" };
+        let map = null, markers = [];
+
+        function initLeaflet() {
+            map = L.map('mini-map', { zoomControl: false }).setView([-7.3305, 110.5084], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        }
+
+        function updateMapVisual() {
+            if (!map) return;
+            markers.forEach(m => map.removeLayer(m)); markers = [];
+            let points = [];
+            if (appState.originPlace?.geometry) {
+                const lat = appState.originPlace.geometry.location.lat();
+                const lng = appState.originPlace.geometry.location.lng();
+                markers.push(L.marker([lat, lng]).addTo(map)); points.push([lat, lng]);
+            }
+            if (appState.destPlace?.geometry) {
+                const lat = appState.destPlace.geometry.location.lat();
+                const lng = appState.destPlace.geometry.location.lng();
+                markers.push(L.marker([lat, lng]).addTo(map)); points.push([lat, lng]);
+            }
+            if (points.length > 0) {
+                document.getElementById('mini-map').style.display = 'block'; map.invalidateSize();
+                if (points.length > 1) map.fitBounds(L.latLngBounds(points), { padding: [50, 50] });
+                else map.setView(points[0], 15);
+            }
+        }
+
+        window.initApp = function() {
+            initLeaflet();
+            const strictBounds = new google.maps.LatLngBounds(
+                new google.maps.LatLng(CONFIG.BOUNDS.south, CONFIG.BOUNDS.west),
+                new google.maps.LatLng(CONFIG.BOUNDS.north, CONFIG.BOUNDS.east)
+            );
+            const opts = { bounds: strictBounds, strictBounds: true, fields: ["geometry", "name", "formatted_address"], componentRestrictions: { country: "id" } };
+            const acOrg = new google.maps.places.Autocomplete(document.getElementById("origin"), opts);
+            const acDst = new google.maps.places.Autocomplete(document.getElementById("destination"), opts);
+
+            acOrg.addListener("place_changed", () => handleSelect('origin', acOrg));
+            acDst.addListener("place_changed", () => handleSelect('destination', acDst));
+        };
+
+        function handleSelect(type, ac) {
+            const place = ac.getPlace();
+            if (!place.geometry) return;
+            const clean = place.formatted_address.replace(/^[A-Z0-9\+]{4,8}(\+[A-Z0-9]{2,})?,\s*/, '');
+            document.getElementById(type).value = clean;
+            if(type === 'origin') appState.originPlace = place; else appState.destPlace = place;
+            updateMapVisual();
+            
+            const btn = document.getElementById('btn-submit');
+            btn.classList.remove('ready');
+            btn.innerText = "Mencari Rute Pendek...";
+            
+            calculateSafeDistance();
+        }
+
+        // --- JURUS BARU: CARI RUTE ALTERNATIF & PILIH YANG TERPENDEK ---
+        function calculateSafeDistance() {
+            if (!appState.originPlace || !appState.destPlace) return;
+            document.getElementById('error-msg').style.display = 'none';
+
+            // Reset Tombol
+            const btn = document.getElementById('btn-submit');
+            btn.innerText = "Mencari Rute Termurah...";
+
+            const directionsService = new google.maps.DirectionsService();
+
+            directionsService.route({
+                origin: appState.originPlace.geometry.location,
+                destination: appState.destPlace.geometry.location,
+                // MODE MOTOR
+                travelMode: google.maps.TravelMode.TWO_WHEELER, 
+                // CARI SEMUA OPSI
+                provideRouteAlternatives: true, 
+                // MOTOR BOLEH LEWAT JALAN RAYA (Jgn diblokir)
+                avoidHighways: false, 
+                // MOTOR GAK BOLEH LEWAT TOL
+                avoidTolls: true 
+            }, (response, status) => {
+                if (status === "OK") {
+                    // LOOPING CARI YANG PALING PENDEK (BUKAN TERCEPAT)
+                    let shortestDist = Infinity;
+
+                    for (let i = 0; i < response.routes.length; i++) {
+                        const routeDist = response.routes[i].legs[0].distance.value;
+                        // Kita log biar lu bisa liat perbandingannya di console
+                        console.log(`Rute ${i+1}: ${(routeDist/1000).toFixed(1)} km`);
+                        
+                        if (routeDist < shortestDist) {
+                            shortestDist = routeDist;
+                        }
+                    }
+
+                    // Pake jarak terpendek yang ditemukan
+                    const googleKm = shortestDist / 1000;
+
+const finalKm = getFinalDistanceKm(
+    googleKm,
+    appState.originPlace.geometry.location,
+    appState.destPlace.geometry.location
+);
+
+applyPricing(finalKm);
+
+                } else {
+                    // Fallback Garis Lurus kalau API Gagal
+                    console.log("Routing Gagal, Pake Garis Lurus");
+                    document.getElementById('error-msg').style.display = 'block';
+                    const p1 = appState.originPlace.geometry.location;
+                    const p2 = appState.destPlace.geometry.location;
+                    const rawDist = google.maps.geometry.spherical.computeDistanceBetween(p1, p2);
+                    const roadKm = (rawDist * 1.3) / 1000; 
+                    applyPricing(roadKm);
+                }
+            });
+        }
+
+            function getFinalDistanceKm(googleKm, p1, p2) {
+            const straightKm =
+        google.maps.geometry.spherical
+        .computeDistanceBetween(p1, p2) / 1000;
+
+    const LMF = 1.25;              // motor lokal Salatiga
+    const motorEstimate = straightKm * LMF;
+
+    // CASE 1: Google muter kejauhan
+    if (googleKm > motorEstimate * 1.15) {
+        return motorEstimate;
+    }
+
+    // CASE 2: Google terlalu optimis (jarang tapi ada)
+    if (googleKm < straightKm * 1.05) {
+        return straightKm * 1.10;
+    }
+
+    // CASE NORMAL
+    return googleKm;
+}
+
+        function applyPricing(distKm) {
+            appState.distance = distKm.toFixed(1);
+            let price = distKm <= 2 ? 6000 : (distKm <= 5 ? 6000 + ((distKm - 2) * 1500) : 10500 + ((distKm - 5) * 2500));
+            appState.price = Math.ceil(price / 500) * 500;
+            
+            document.getElementById('price-display').innerText = "Rp " + appState.price.toLocaleString('id-ID');
+            document.getElementById('dist-display').innerText = appState.distance + " km";
+            document.getElementById('result-area').style.display = "block";
+            
+            updateLinkWA();
+        }
+
+        window.forceUpdateLink = function() { updateLinkWA(); }
+
+        window.updateLinkWA = function() {
+            if (!appState.price) return;
+            if (!appState.orderId) appState.orderId = `${appState.service === 'ojek' ? 'OJK' : 'JST'}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+
+            const note = document.getElementById('destination-note').value;
+            const detail = document.getElementById('detail-text').value;
+            const prc = appState.price.toLocaleString('id-ID');
+
+            // --- FORMAT STRUK TEXT ONLY (AMAN 100%) ---
+            // Kita pake simbol keyboard biasa biar gak error encoding
+            
+            let msg = `Halo Kak! Order ${appState.service.toUpperCase()}\n` +
+                      `================\n` +
+                      `ID ORDER : ${appState.orderId}\n` +
+                      `----------------\n` +
+                      `• Jemput : ${document.getElementById('origin').value}\n` +
+                      `• Tujuan : ${document.getElementById('destination').value}\n`;
+
+            if (note) msg += `• Catatan : ${note}\n`;
+            if (detail) msg += `• Detail : ${detail}\n`;
+            
+            msg += `----------------\n` +
+                   `• Jarak : ${appState.distance} km\n` +
+                   `• Ongkir : Rp ${prc}\n` +
+                   `================\n` +
+                   `Gas jemput?`;
+
+            const btn = document.getElementById('btn-submit');
+            btn.href = `https://wa.me/${CONFIG.WA}?text=${encodeURIComponent(msg)}`;
+            btn.classList.add('ready');
+            btn.innerText = "GAS JEMPUT 🚀";
+            
+            if(window.logOrder) window.logOrder({ id: appState.orderId, price: appState.price, service: appState.service });
+        }
+
+        window.selectService = function(type) {
+            appState.service = type; appState.orderId = "";
+            document.querySelectorAll('.service-card').forEach(el => el.classList.remove('active'));
+            document.getElementById(`card-${type}`).classList.add('active');
+            document.getElementById('booking-form').style.display = 'block';
+            document.getElementById('group-detail').style.display = type === 'ojek' ? 'none' : 'block';
+            
+            const btnGps = document.getElementById('btn-gps');
+            if (type === 'ojek') document.getElementById('wrapper-origin').appendChild(btnGps);
+            else document.getElementById('wrapper-destination').appendChild(btnGps);
+            btnGps.style.display = 'flex';
+            document.getElementById('booking-form').scrollIntoView({ behavior: 'smooth' });
+            setTimeout(() => { map.invalidateSize(); }, 300);
+        }
+
+        document.getElementById('btn-gps').addEventListener('click', () => {
+            const btn = document.getElementById('btn-gps'); btn.innerHTML = "<span>⏳</span>";
+            navigator.geolocation.getCurrentPosition(pos => {
+                const latlng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                new google.maps.Geocoder().geocode({ location: latlng }, (res, status) => {
+                    btn.innerHTML = "<span>📍</span> Lokasi Saya";
+                    if (status === "OK") {
+                        const clean = res[0].formatted_address.replace(/^[A-Z0-9\+]{4,8}(\+[A-Z0-9]{2,})?,\s*/, '');
+                        const target = btn.parentElement.id.includes('origin') ? 'origin' : 'destination';
+                        document.getElementById(target).value = clean;
+                        const obj = { geometry: res[0].geometry, formatted_address: clean, name: clean };
+                        if(target === 'origin') appState.originPlace = obj; else appState.destPlace = obj;
+                        updateMapVisual(); calculateSafeDistance();
+                    }
+                });
+            }, () => { btn.innerHTML = "<span>📍</span> Lokasi Saya"; alert("Nyalakan GPS!"); });
+        });
+
+        window.clearInput = function(id) {
+            document.getElementById(id).value = '';
+            if(id === 'origin') appState.originPlace = null; else appState.destPlace = null;
+        };
+    </script>
+</body>
+</html>
