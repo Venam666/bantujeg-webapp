@@ -22,10 +22,17 @@
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body { font-family: 'Plus Jakarta Sans', sans-serif; background: #ffffff; color: var(--dark); padding-bottom: 100px; }
 
-        header { padding: 16px 20px; background: white; position: sticky; top: 0; z-index: 50; border-bottom: 1px solid #f1f1f1; }
-        .brand { font-size: 1.25rem; font-weight: 800; color: var(--primary); display: flex; align-items: center; gap: 8px; }
-        .pulse { width: 8px; height: 8px; background: #10B981; border-radius: 50%; animation: pulse 1.5s infinite; }
-        @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.5); } 100% { opacity: 1; transform: scale(1); } }
+        /* HEADER REDESIGN */
+        header { 
+            padding: 12px 20px; background: white; position: sticky; top: 0; z-index: 50; border-bottom: 1px solid #f1f1f1;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .brand-container { display: flex; flex-direction: column; }
+        .brand-name { font-size: 1.25rem; font-weight: 800; color: var(--primary); line-height: 1.1; }
+        .greeting { font-size: 0.8rem; color: #64748B; font-weight: 600; }
+        
+        .pulse { width: 10px; height: 10px; background: #10B981; border-radius: 50%; animation: pulse 1.5s infinite; box-shadow: 0 0 0 rgba(16, 185, 129, 0.4); }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
 
         /* --- MAP UI IMPROVEMENTS --- */
         #map-wrapper {
@@ -44,21 +51,13 @@
         
         /* Leaflet Tooltip Customization */
         .map-tooltip {
-            background: rgba(15, 23, 42, 0.8);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            padding: 4px 8px;
-            font-size: 0.75rem;
-            font-weight: 600;
+            background: rgba(15, 23, 42, 0.9);
+            color: white; border: none; border-radius: 8px;
+            padding: 6px 10px; font-size: 0.75rem; font-weight: 600;
         }
-        .leaflet-tooltip-top:before { border-top-color: rgba(15, 23, 42, 0.8); }
+        .leaflet-tooltip-top:before { border-top-color: rgba(15, 23, 42, 0.9); }
 
-        .card-interface {
-            background: white;
-            padding: 24px;
-            min-height: 50vh;
-        }
+        .card-interface { background: white; padding: 24px; min-height: 50vh; }
 
         .tabs { display: flex; gap: 8px; margin-bottom: 24px; background: var(--gray); padding: 4px; border-radius: 16px; border: 1px solid var(--border); }
         .tab { flex: 1; padding: 12px; text-align: center; border-radius: 12px; font-weight: 700; font-size: 0.9rem; color: #64748B; cursor: pointer; transition: all 0.2s; }
@@ -143,10 +142,11 @@
 <body>
 
     <header>
-        <div class="brand">
-            <div>BantuJeg.</div>
-            <div class="pulse" id="status-dot"></div> 
+        <div class="brand-container">
+            <div class="brand-name">BantuJeg.</div>
+            <div class="greeting">Siap Antar Kamu! 👋</div>
         </div>
+        <div class="pulse" id="status-dot"></div> 
     </header>
 
     <div id="map-wrapper">
@@ -233,7 +233,8 @@
             places: { origin: null, dest: null },
             calc: { distance: 0, price: 0 },
             map: null,
-            markers: { origin: null, dest: null }
+            markers: { origin: null, dest: null },
+            debounceTimer: null
         };
     </script>
 
@@ -274,7 +275,18 @@
         const CONFIG_WA = "62895330091464"; 
 
         function initMap() {
-            window.APP.map = L.map('map', { zoomControl: false }).setView([-7.3305, 110.5084], 14);
+            // MAP BOUNDS: Salatiga Center +/- ~0.7deg (~75km)
+            const center = [-7.3305, 110.5084];
+            const southWest = L.latLng(-8.0055, 109.8334);
+            const northEast = L.latLng(-6.6555, 111.1834);
+            const bounds = L.latLngBounds(southWest, northEast);
+
+            window.APP.map = L.map('map', { 
+                zoomControl: false,
+                maxBounds: bounds,
+                maxBoundsViscosity: 1.0, // Hard limit, bounces back
+                minZoom: 10
+            }).setView(center, 14);
             
             L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
                 attribution: '&copy; CARTO',
@@ -285,7 +297,6 @@
         // --- HELPER: CLEAN ADDRESS (No Plus Code) ---
         function cleanAddress(address) {
             if (!address) return "";
-            // Regex: Remove pattern like "JGJ7+H9X, " or "8X92+22, " at start
             return address.replace(/^[A-Z0-9\+]{4,8}(\+[A-Z0-9]{2,})?,\s*/, '');
         }
 
@@ -347,12 +358,28 @@
                 map.setView([lat, lng], 16);
             }
 
+            // --- STRICT DEBOUNCE LOGIC (FIX API BILLING) ---
             markers[type].on('dragend', function(e) {
                 const pos = e.target.getLatLng();
-                if (window.APP.places[type]) {
-                    window.APP.places[type].geometry.location = { lat: () => pos.lat, lng: () => pos.lng };
-                    calculateRoute(); 
-                }
+                
+                // 1. Cancel previous timer if exists
+                if (window.APP.debounceTimer) clearTimeout(window.APP.debounceTimer);
+                
+                // 2. UI Feedback: Show User we are waiting
+                const btnText = document.getElementById('btn-text');
+                const btn = document.getElementById('btn-submit');
+                btn.classList.add('disabled');
+                btnText.innerText = "Menentukan Titik...";
+                document.getElementById('price-card').style.display = 'none';
+
+                // 3. Start new timer (1000ms)
+                window.APP.debounceTimer = setTimeout(() => {
+                    if (window.APP.places[type]) {
+                        // Mock Google LatLng behavior for Directions Service
+                        window.APP.places[type].geometry.location = { lat: () => pos.lat, lng: () => pos.lng };
+                        calculateRoute(); 
+                    }
+                }, 1000);
             });
         }
 
