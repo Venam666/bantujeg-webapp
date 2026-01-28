@@ -13,33 +13,54 @@
         :root { 
             --primary: #10B981; 
             --primary-dark: #059669;
+            --danger: #EF4444;
             --dark: #0F172A; 
-            --gray: #F1F5F9; 
+            --gray: #F8FAFC; 
+            --border: #E2E8F0;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body { font-family: 'Plus Jakarta Sans', sans-serif; background: #ffffff; color: var(--dark); padding-bottom: 100px; }
 
-        header { padding: 20px; background: white; position: sticky; top: 0; z-index: 50; border-bottom: 1px solid #eee; }
+        header { padding: 16px 20px; background: white; position: sticky; top: 0; z-index: 50; border-bottom: 1px solid #f1f1f1; }
         .brand { font-size: 1.25rem; font-weight: 800; color: var(--primary); display: flex; align-items: center; gap: 8px; }
         .pulse { width: 8px; height: 8px; background: #10B981; border-radius: 50%; animation: pulse 1.5s infinite; }
         @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.5); } 100% { opacity: 1; transform: scale(1); } }
 
+        /* --- MAP UI IMPROVEMENTS --- */
+        #map-wrapper {
+            padding: 20px 20px 0 20px;
+            background: white;
+        }
         #map-container { 
-            height: 35vh; width: 100%; position: relative; background: #eee; 
+            height: 280px; width: 100%; position: relative; 
+            background: #eee; border-radius: 24px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
             transition: height 0.3s ease;
         }
-        #map-container.expanded { height: 50vh; }
+        #map-container.expanded { height: 400px; }
         #map { width: 100%; height: 100%; z-index: 1; }
+        
+        /* Leaflet Tooltip Customization */
+        .map-tooltip {
+            background: rgba(15, 23, 42, 0.8);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 4px 8px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .leaflet-tooltip-top:before { border-top-color: rgba(15, 23, 42, 0.8); }
 
         .card-interface {
-            background: white; border-radius: 24px 24px 0 0; 
-            margin-top: -20px; position: relative; z-index: 10;
-            padding: 24px; box-shadow: 0 -10px 40px rgba(0,0,0,0.05);
-            min-height: 60vh;
+            background: white;
+            padding: 24px;
+            min-height: 50vh;
         }
 
-        .tabs { display: flex; gap: 10px; margin-bottom: 20px; background: var(--gray); padding: 4px; border-radius: 16px; }
+        .tabs { display: flex; gap: 8px; margin-bottom: 24px; background: var(--gray); padding: 4px; border-radius: 16px; border: 1px solid var(--border); }
         .tab { flex: 1; padding: 12px; text-align: center; border-radius: 12px; font-weight: 700; font-size: 0.9rem; color: #64748B; cursor: pointer; transition: all 0.2s; }
         .tab.active { background: white; color: var(--dark); box-shadow: 0 4px 12px rgba(0,0,0,0.05); transform: scale(1.02); }
 
@@ -48,15 +69,25 @@
         /* ICON INPUT */
         .input-icon { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); font-size: 1.2rem; z-index: 2; }
         
-        /* TOMBOL GPS (JURUS MAGER) */
+        /* CLEAR BUTTON (X) */
+        .clear-btn {
+            position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+            width: 24px; height: 24px; border-radius: 50%; background: #E2E8F0;
+            color: #64748B; display: flex; align-items: center; justify-content: center;
+            font-size: 14px; font-weight: bold; cursor: pointer; z-index: 6;
+            display: none; /* Hidden by default */
+        }
+        .clear-btn:hover { background: #cbd5e1; color: var(--dark); }
+
+        /* TOMBOL GPS */
         .gps-icon { 
             position: absolute; right: 12px; top: 50%; transform: translateY(-50%); 
-            background: #E0F2FE; color: #0284C7; 
-            padding: 8px 12px; border-radius: 12px; font-size: 0.8rem; font-weight: 700;
+            background: white; color: #0284C7; border: 1px solid #E0F2FE;
+            padding: 8px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: 700;
             cursor: pointer; z-index: 5; display: flex; align-items: center; gap: 6px;
-            border: 1px solid transparent; transition: all 0.2s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05); transition: all 0.2s;
         }
-        .gps-icon:active { transform: scale(0.95); background: #bae6fd; }
+        .gps-icon:active { transform: scale(0.95); background: #f0f9ff; }
 
         input[type="text"], textarea, input[type="number"] { 
             width: 100%; padding: 16px 16px 16px 48px; 
@@ -65,15 +96,28 @@
             transition: all 0.2s;
         }
         input:focus { border-color: var(--primary); background: white; outline: none; }
-        /* Kasih ruang buat tombol GPS di kanan */
-        #origin { padding-right: 120px; } 
+        
+        /* Padding Logic for Right Icons */
+        #origin { padding-right: 120px; } /* Space for GPS */
+        #destination, #note { padding-right: 48px; } /* Space for Clear Btn */
 
+        /* PRICE CARD */
         .price-card { 
             background: linear-gradient(135deg, #0F172A 0%, #334155 100%);
             color: white; padding: 20px; border-radius: 20px;
             display: none; align-items: center; justify-content: space-between;
             margin-top: 20px; animation: slideUp 0.3s ease;
+            box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.3);
         }
+        
+        /* ERROR CARD (DISTANCE LIMIT) */
+        .error-card {
+            background: #FEF2F2; color: var(--danger); border: 1px solid #FECACA;
+            padding: 16px; border-radius: 16px; margin-top: 20px;
+            font-weight: 600; text-align: center; display: none; font-size: 0.9rem;
+            animation: slideUp 0.3s ease;
+        }
+
         @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         
         .price-main { font-size: 1.8rem; font-weight: 800; letter-spacing: -0.5px; }
@@ -105,8 +149,10 @@
         </div>
     </header>
 
-    <div id="map-container">
-        <div id="map"></div>
+    <div id="map-wrapper">
+        <div id="map-container">
+            <div id="map"></div>
+        </div>
     </div>
 
     <div class="card-interface">
@@ -115,25 +161,33 @@
             <div class="tab" onclick="setService('FOOD_MART')">📦 JASTIP</div>
         </div>
 
+        <!-- ORIGIN -->
         <div class="input-group">
             <span class="input-icon">📍</span>
-            <input type="text" id="origin" placeholder="Jemput di mana?" onfocus="expandMap()">
+            <input type="text" id="origin" placeholder="Jemput di mana?" onfocus="expandMap()" oninput="toggleClearBtn('origin')">
+            
+            <div class="clear-btn" id="clear-origin" onclick="clearInput('origin')">✕</div>
             
             <div class="gps-icon" onclick="getCurrentLocation()">
-                <span>🎯</span> Lokasi Saya
+                <span>🎯</span> Sini Aja
             </div>
         </div>
 
+        <!-- DESTINATION -->
         <div class="input-group">
             <span class="input-icon">🏁</span>
-            <input type="text" id="destination" placeholder="Mau ke mana?">
+            <input type="text" id="destination" placeholder="Mau ke mana?" oninput="toggleClearBtn('destination')">
+            <div class="clear-btn" id="clear-destination" onclick="clearInput('destination')">✕</div>
         </div>
 
+        <!-- NOTE -->
         <div class="input-group">
             <span class="input-icon">📝</span>
-            <input type="text" id="note" placeholder="Catatan (Pagar hitam, dll)" oninput="updateLink()">
+            <input type="text" id="note" placeholder="Catatan (Pagar hitam, dll)" oninput="updateLink(); toggleClearBtn('note')">
+            <div class="clear-btn" id="clear-note" onclick="clearInput('note')">✕</div>
         </div>
 
+        <!-- JASTIP FIELDS -->
         <div id="jastip-field" style="display: none;">
             <div class="input-group">
                 <span class="input-icon">🛒</span>
@@ -145,6 +199,12 @@
             </div>
         </div>
 
+        <!-- ERROR MESSAGE -->
+        <div class="error-card" id="error-card">
+            ✋ Kejauhan Boss! Max 25km ya.
+        </div>
+
+        <!-- PRICE DISPLAY -->
         <div class="price-card" id="price-card">
             <div>
                 <div class="price-dist" id="dist-display">0 km</div>
@@ -181,7 +241,6 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // CONFIG DARI APP.JS YANG DIUPLOAD USER
         const firebaseConfig = {
             apiKey: "AIzaSyAekghf6Oydh17aYc_ia1zy3oNDsFK4aww",
             authDomain: "tanganbantu-poc.firebaseapp.com",
@@ -194,7 +253,6 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // FETCH CONFIG
         async function loadConfigs() {
             try {
                 const [rideSnap, foodSnap] = await Promise.all([
@@ -204,13 +262,11 @@
 
                 if (rideSnap.exists()) window.APP.config.RIDE = rideSnap.data();
                 if (foodSnap.exists()) window.APP.config.FOOD_MART = foodSnap.data();
-
                 console.log("✅ CONFIG LOADED");
             } catch (e) {
                 console.error("❌ Config Error:", e);
             }
         }
-
         loadConfigs();
     </script>
 
@@ -218,13 +274,50 @@
         const CONFIG_WA = "62895330091464"; 
 
         function initMap() {
-            // Default Salatiga
-            window.APP.map = L.map('map', { zoomControl: false }).setView([-7.3305, 110.5084], 15);
+            window.APP.map = L.map('map', { zoomControl: false }).setView([-7.3305, 110.5084], 14);
             
             L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
                 attribution: '&copy; CARTO',
                 maxZoom: 20
             }).addTo(window.APP.map);
+        }
+
+        // --- HELPER: CLEAN ADDRESS (No Plus Code) ---
+        function cleanAddress(address) {
+            if (!address) return "";
+            // Regex: Remove pattern like "JGJ7+H9X, " or "8X92+22, " at start
+            return address.replace(/^[A-Z0-9\+]{4,8}(\+[A-Z0-9]{2,})?,\s*/, '');
+        }
+
+        // --- UI: CLEAR INPUT ---
+        window.toggleClearBtn = function(id) {
+            const input = document.getElementById(id);
+            const btn = document.getElementById('clear-' + id);
+            if(input.value.length > 0) btn.style.display = 'flex';
+            else btn.style.display = 'none';
+        }
+
+        window.clearInput = function(id) {
+            const input = document.getElementById(id);
+            input.value = '';
+            toggleClearBtn(id);
+
+            // Reset Logic
+            if (id === 'origin' || id === 'destination') {
+                const type = id === 'origin' ? 'origin' : 'dest';
+                window.APP.places[type] = null;
+                
+                // Remove Marker
+                if (window.APP.markers[type]) {
+                    window.APP.map.removeLayer(window.APP.markers[type]);
+                    window.APP.markers[type] = null;
+                }
+                
+                // Reset Price
+                document.getElementById('price-card').style.display = 'none';
+                document.getElementById('error-card').style.display = 'none';
+                updateLink(); // Disable button
+            }
         }
 
         function updateMarker(type, lat, lng) {
@@ -235,10 +328,17 @@
                 ? 'https://cdn-icons-png.flaticon.com/512/684/684908.png' 
                 : 'https://cdn-icons-png.flaticon.com/512/684/684913.png';
             
-            const icon = L.icon({ iconUrl, iconSize: [32, 32], iconAnchor: [16, 32] });
+            const icon = L.icon({ iconUrl, iconSize: [36, 36], iconAnchor: [18, 36], tooltipAnchor: [0, -38] });
 
             if (markers[type]) map.removeLayer(markers[type]);
-            markers[type] = L.marker([lat, lng], { icon, draggable: true }).addTo(map);
+            
+            markers[type] = L.marker([lat, lng], { icon, draggable: true })
+                .addTo(map)
+                .bindTooltip("Geser pin untuk pasin titik", { 
+                    permanent: true, 
+                    direction: 'top', 
+                    className: 'map-tooltip' 
+                }).openTooltip();
 
             if (markers.origin && markers.dest) {
                 const group = new L.featureGroup([markers.origin, markers.dest]);
@@ -256,16 +356,12 @@
             });
         }
 
-        // --- FITUR GPS LOKASI SAYA ---
         function getCurrentLocation() {
-            if (!navigator.geolocation) {
-                alert("Browser tidak support GPS");
-                return;
-            }
+            if (!navigator.geolocation) { alert("Browser tidak support GPS"); return; }
 
             const btnText = document.querySelector('.gps-icon');
             const originalText = btnText.innerHTML;
-            btnText.innerHTML = "⏳ Mencari...";
+            btnText.innerHTML = "⏳...";
 
             navigator.geolocation.getCurrentPosition(
                 (position) => {
@@ -273,25 +369,22 @@
                     const lng = position.coords.longitude;
                     const latlng = { lat: lat, lng: lng };
 
-                    // Reverse Geocoding (LatLong -> Nama Jalan)
                     const geocoder = new google.maps.Geocoder();
                     geocoder.geocode({ location: latlng }, (results, status) => {
                         btnText.innerHTML = originalText;
-                        
                         if (status === "OK" && results[0]) {
-                            const address = results[0].formatted_address.split(',')[0]; // Ambil nama jalan depan aja
+                            // CLEAN ADDRESS
+                            const rawAddr = results[0].formatted_address;
+                            const cleaned = cleanAddress(rawAddr);
                             
-                            // Isi Input Origin
-                            document.getElementById('origin').value = address;
+                            document.getElementById('origin').value = cleaned;
+                            toggleClearBtn('origin');
                             
-                            // Update State & Peta
-                            window.APP.places.origin = results[0];
+                            window.APP.places.origin = results[0]; // Keep raw obj
                             updateMarker('origin', lat, lng);
                             expandMap();
 
-                            // Kalau tujuan udah ada, langsung hitung
                             if (window.APP.places.dest) calculateRoute();
-
                         } else {
                             alert("Gagal mendeteksi nama jalan.");
                         }
@@ -326,6 +419,12 @@
             const place = ac.getPlace();
             if (!place.geometry) return;
 
+            // CLEAN ADDRESS ON SELECT
+            const inputId = type === 'origin' ? 'origin' : 'destination';
+            const cleaned = cleanAddress(place.formatted_address);
+            document.getElementById(inputId).value = cleaned;
+            toggleClearBtn(inputId);
+
             window.APP.places[type] = place;
             updateMarker(type, place.geometry.location.lat(), place.geometry.location.lng());
             calculateRoute();
@@ -336,6 +435,7 @@
             if (!origin || !dest) return;
 
             setLoading(true);
+            document.getElementById('error-card').style.display = 'none';
 
             const directionsService = new google.maps.DirectionsService();
             directionsService.route({
@@ -353,7 +453,6 @@
                         res.routes[0].legs[0].end_location
                     ) / 1000;
 
-                    // SMART DISTANCE CONFIG
                     const configRide = window.APP.config.RIDE || {};
                     const logic = configRide.distance_logic || { lmf: 1.25, detour_limit: 1.15 };
                     
@@ -364,19 +463,37 @@
                     else if (googleKm < straightKm * 1.05) finalKm = straightKm * 1.10;
 
                     window.APP.calc.distance = parseFloat(finalKm.toFixed(2));
-                    calculatePrice(finalKm);
+                    
+                    // VALIDASI JARAK MAX 25KM
+                    if (window.APP.calc.distance > 25) {
+                        showError("Kejauhan Boss! Max 25km ya.");
+                    } else {
+                        calculatePrice(finalKm);
+                    }
                 }
             });
+        }
+
+        function showError(msg) {
+            const errCard = document.getElementById('error-card');
+            const priceCard = document.getElementById('price-card');
+            const btn = document.getElementById('btn-submit');
+            const btnText = document.getElementById('btn-text');
+
+            errCard.style.display = 'block';
+            errCard.innerText = "✋ " + msg;
+            priceCard.style.display = 'none';
+            
+            btn.classList.add('disabled');
+            btnText.innerText = "Jarak Terlalu Jauh";
+            window.APP.calc.price = 0;
         }
 
         function calculatePrice(distance) {
             const service = window.APP.service;
             const config = window.APP.config[service];
 
-            if (!config) {
-                console.warn("Config belum load...");
-                return;
-            }
+            if (!config) { console.warn("Config loading..."); return; }
 
             let price = 0;
             const tiers = config.pricing_model?.tiers || config.TIERS; 
@@ -387,16 +504,13 @@
                  else price = tier.base_price + ((distance - tier.offset_km) * tier.price_per_km);
             } 
             else if (tiers.BASE) {
+                // Fallback logic
                 const baseLimit = tiers.BASE.max_distance_km || 2;
-                const midLimit = tiers.MID.max_distance_km || 4;
-
                 if (distance <= baseLimit) price = tiers.BASE.delivery_fee;
-                else if (distance <= midLimit) price = tiers.MID.base_fee + ((distance - baseLimit) * tiers.MID.price_per_km);
-                else price = tiers.FAR.base_fee + ((distance - midLimit) * tiers.FAR.price_per_km);
+                else price = tiers.MID.base_fee + ((distance - baseLimit) * tiers.MID.price_per_km);
             }
 
             price = Math.ceil(price / 500) * 500;
-            
             window.APP.calc.price = price;
             
             document.getElementById('price-display').innerText = `Rp ${price.toLocaleString('id-ID')}`;
@@ -424,17 +538,31 @@
             const items = document.getElementById('items').value;
             const estPrice = document.getElementById('est-price').value;
             
+            // GENERATE ID
+            const serviceCode = window.APP.service === 'RIDE' ? 'OJK' : 'JST';
+            const orderID = `${serviceCode}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+
+            // WA FORMAT STRICT
             let msg = `Halo Kak! Order ${window.APP.service}\n` +
-                      `Jemput: ${document.getElementById('origin').value}\n` +
-                      `Tujuan: ${document.getElementById('destination').value}\n`;
+                      `================\n` +
+                      `ID ORDER : ${orderID}\n` +
+                      `----------------\n` +
+                      `• Jemput : ${document.getElementById('origin').value}\n` +
+                      `• Tujuan : ${document.getElementById('destination').value}\n`;
+
+            if(note) msg += `• Catatan : ${note}\n`;
             
-            if (note) msg += `Catatan: ${note}\n`;
             if (window.APP.service === 'FOOD_MART') {
-                msg += `Item: ${items}\nEst. Harga Barang: Rp ${estPrice || 0}\n`;
+                msg += `----------------\n` + 
+                       `• Item : ${items}\n` +
+                       `• Est. Harga Barang : Rp ${estPrice || 0}\n`;
             }
-            
-            msg += `Est. Harga: Rp ${price}\n` + 
-                   `Gas?`;
+
+            msg += `----------------\n` +
+                   `• Jarak : ${window.APP.calc.distance} km\n` + 
+                   `• Ongkir : Rp ${price.toLocaleString('id-ID')}\n` +
+                   `================\n` +
+                   `Gas jemput?`;
 
             btn.href = `https://wa.me/${CONFIG_WA}?text=${encodeURIComponent(msg)}`;
         }
@@ -453,7 +581,9 @@
                 document.getElementById('origin').placeholder = "Jemput di mana?";
             }
             
-            if (window.APP.calc.distance > 0) calculatePrice(window.APP.calc.distance);
+            if (window.APP.calc.distance > 0 && window.APP.calc.distance <= 25) {
+                calculatePrice(window.APP.calc.distance);
+            }
         }
 
         function expandMap() {
@@ -472,7 +602,6 @@
             }
         }
 
-        // START
         initMap();
         window.onload = initAutocomplete;
 
