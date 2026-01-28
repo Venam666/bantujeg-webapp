@@ -78,6 +78,11 @@
         }
         .clear-btn:hover { background: #cbd5e1; color: var(--dark); }
 
+        /* Specific fix for Origin Clear Button to avoid overlap with GPS button */
+        #clear-origin {
+            right: 115px; /* GPS button width + spacing */
+        }
+
         /* TOMBOL GPS */
         .gps-icon { 
             position: absolute; right: 12px; top: 50%; transform: translateY(-50%); 
@@ -97,7 +102,7 @@
         input:focus { border-color: var(--primary); background: white; outline: none; }
         
         /* Padding Logic for Right Icons */
-        #origin { padding-right: 120px; } /* Space for GPS */
+        #origin { padding-right: 150px; } /* Space for GPS + Clear Btn */
         #destination, #note { padding-right: 48px; } /* Space for Clear Btn */
 
         /* PRICE CARD */
@@ -233,8 +238,7 @@
             places: { origin: null, dest: null },
             calc: { distance: 0, price: 0 },
             map: null,
-            markers: { origin: null, dest: null },
-            debounceTimer: null
+            markers: { origin: null, dest: null }
         };
     </script>
 
@@ -343,9 +347,14 @@
 
             if (markers[type]) map.removeLayer(markers[type]);
             
-            markers[type] = L.marker([lat, lng], { icon, draggable: true })
-                .addTo(map)
-                .bindTooltip("Geser pin untuk pasin titik", { 
+            // COST SAVING: Draggable FALSE to prevent accidental API triggers
+            markers[type] = L.marker([lat, lng], { icon, draggable: false })
+                .addTo(map);
+
+            // STATIC LABEL
+            const label = type === 'origin' ? "📍 Titik Jemput" : "🏁 Tujuan Antar";
+            
+            markers[type].bindTooltip(label, { 
                     permanent: true, 
                     direction: 'top', 
                     className: 'map-tooltip' 
@@ -357,30 +366,8 @@
             } else {
                 map.setView([lat, lng], 16);
             }
-
-            // --- STRICT DEBOUNCE LOGIC (FIX API BILLING) ---
-            markers[type].on('dragend', function(e) {
-                const pos = e.target.getLatLng();
-                
-                // 1. Cancel previous timer if exists
-                if (window.APP.debounceTimer) clearTimeout(window.APP.debounceTimer);
-                
-                // 2. UI Feedback: Show User we are waiting
-                const btnText = document.getElementById('btn-text');
-                const btn = document.getElementById('btn-submit');
-                btn.classList.add('disabled');
-                btnText.innerText = "Menentukan Titik...";
-                document.getElementById('price-card').style.display = 'none';
-
-                // 3. Start new timer (1000ms)
-                window.APP.debounceTimer = setTimeout(() => {
-                    if (window.APP.places[type]) {
-                        // Mock Google LatLng behavior for Directions Service
-                        window.APP.places[type].geometry.location = { lat: () => pos.lat, lng: () => pos.lng };
-                        calculateRoute(); 
-                    }
-                }, 1000);
-            });
+            
+            // REMOVED: dragend listeners to save API calls
         }
 
         function getCurrentLocation() {
