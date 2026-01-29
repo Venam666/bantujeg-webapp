@@ -14,6 +14,8 @@
             --primary: #10B981; 
             --primary-dark: #059669;
             --danger: #EF4444;
+            --warning-bg: #FEF9C3;
+            --warning-text: #854D0E;
             --dark: #0F172A; 
             --gray: #F8FAFC; 
             --border: #E2E8F0;
@@ -70,7 +72,6 @@
         input:focus { border-color: var(--primary); background: white; outline: none; }
 
         /* UI FIX: INPUT OVERLAP LOGIC */
-        /* When wrapper has GPS button, push padding and move Clear button */
         .input-wrapper.has-gps input { padding-right: 150px !important; }
         .input-wrapper.has-gps .clear-btn { right: 125px !important; }
 
@@ -111,6 +112,13 @@
             padding: 6px 12px; border-radius: 20px; font-size: 0.75rem; white-space: nowrap; cursor: pointer; flex-shrink: 0;
         }
         .chip:active { background: #E2E8F0; transform: scale(0.95); }
+
+        /* LEGAL WARNING */
+        #legal-warning {
+            background: var(--warning-bg); border: 1px solid #FDE047; color: var(--warning-text);
+            padding: 12px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;
+            margin-top: 12px; display: none; line-height: 1.4;
+        }
 
         /* CARDS */
         .price-card { 
@@ -177,14 +185,14 @@
         <div class="tabs">
             <div class="tab active" onclick="setService('RIDE', this)">🛵 OJEK</div>
             <div class="tab" onclick="setService('SEND', this)">📦 SEND</div>
-            <div class="tab" onclick="setService('FOOD_MART', this)">🛍️ JASTIP</div>
+            <div class="tab" onclick="setService('FOOD_MART', this)">🍜 JASTIP</div>
         </div>
 
         <!-- ORIGIN -->
         <div class="input-group">
             <div class="input-wrapper" id="wrapper-origin">
                 <span class="input-icon">📍</span>
-                <input type="text" id="origin" placeholder="Jemput di mana? (Cari Masjid/Sekolah)" onfocus="expandMap()" oninput="toggleClearBtn('origin')">
+                <input type="text" id="origin" placeholder="Jemput di mana? (Cari Masjid/Sekolah)" onfocus="expandMap()" oninput="handleInput('origin')">
                 <div class="clear-btn" id="clear-origin" onclick="clearInput('origin')">✕</div>
                 <!-- GPS Button moves here for OJEK & SEND -->
             </div>
@@ -194,7 +202,7 @@
         <div class="input-group">
             <div class="input-wrapper" id="wrapper-destination">
                 <span class="input-icon">🏁</span>
-                <input type="text" id="destination" placeholder="Antar ke mana?" oninput="toggleClearBtn('destination')">
+                <input type="text" id="destination" placeholder="Antar ke mana?" oninput="handleInput('destination')">
                 <div class="clear-btn" id="clear-destination" onclick="clearInput('destination')">✕</div>
                 <!-- GPS Button moves here for JASTIP -->
             </div>
@@ -218,6 +226,11 @@
                 <div class="chip" onclick="addNote('Pagar Hitam')">Pagar Hitam</div>
                 <div class="chip" onclick="addNote('Sesuai Titik')">Sesuai Titik</div>
                 <div class="chip" onclick="addNote('Jemput di Gang')">Jemput di Gang</div>
+            </div>
+            
+            <!-- Legal Warning (Send Only) -->
+            <div id="legal-warning">
+                ⚠️ Dilarang kirim: Narkoba, Hewan, Senjata & Barang Ilegal. Driver berhak cek barang.
             </div>
         </div>
 
@@ -404,7 +417,27 @@
             return address.replace(/^[A-Z0-9\+]{4,8}(\+[A-Z0-9]{2,})?,\s*/, '');
         }
 
-        // --- UI: CLEAR INPUT ---
+        // --- UI: INPUT HANDLERS ---
+        window.handleInput = function(id) {
+            toggleClearBtn(id);
+            // VALIDASI: Kalau user hapus teks, reset harga & button
+            const val = document.getElementById(id).value;
+            if (val.trim() === '') {
+                // Determine which type it is
+                if (id === 'origin' || id === 'destination') {
+                    const type = id === 'origin' ? 'origin' : 'dest';
+                    window.APP.places[type] = null;
+                    if (window.APP.markers[type]) {
+                        window.APP.map.removeLayer(window.APP.markers[type]);
+                        window.APP.markers[type] = null;
+                    }
+                    window.APP.calc.price = 0;
+                    document.getElementById('price-card').style.display = 'none';
+                    updateLink();
+                }
+            }
+        }
+
         window.toggleClearBtn = function(id) {
             const input = document.getElementById(id);
             const btn = document.getElementById('clear-' + id);
@@ -424,9 +457,10 @@
                     window.APP.map.removeLayer(window.APP.markers[type]);
                     window.APP.markers[type] = null;
                 }
+                window.APP.calc.price = 0; // Reset Price
                 document.getElementById('price-card').style.display = 'none';
                 document.getElementById('error-card').style.display = 'none';
-                updateLink();
+                updateLink(); // Update Button State
             }
         }
 
@@ -534,7 +568,15 @@
 
         function calculateRoute() {
             const { origin, dest } = window.APP.places;
-            if (!origin || !dest) return;
+            const originVal = document.getElementById('origin').value.trim();
+            const destVal = document.getElementById('destination').value.trim();
+
+            // VALIDASI: Cek text kosong walaupun object place ada
+            if (!origin || !dest || originVal === '' || destVal === '') {
+                window.APP.calc.price = 0;
+                updateLink();
+                return;
+            }
 
             setLoading(true);
             document.getElementById('error-card').style.display = 'none';
@@ -626,7 +668,11 @@
             const textBtn = document.getElementById('btn-text');
             const price = window.APP.calc.price;
             
-            if (price === 0) {
+            // VALIDASI STRICT: Input Kosong = Disable
+            const originVal = document.getElementById('origin').value.trim();
+            const destVal = document.getElementById('destination').value.trim();
+
+            if (price === 0 || originVal === '' || destVal === '') {
                 btn.classList.add('disabled');
                 textBtn.innerText = "Isi Lokasi Dulu";
                 return;
@@ -691,7 +737,29 @@
             if(el) el.classList.add('active');
             else document.querySelector('.tab').classList.add('active'); 
             
+            // === TAB ISOLATION (RESET EVERYTHING) ===
+            document.getElementById('origin').value = '';
+            document.getElementById('destination').value = '';
+            document.getElementById('note').value = '';
+            document.getElementById('items').value = '';
+            document.getElementById('est-price').value = '';
+            
+            // Reset State & Map
+            window.APP.places = { origin: null, dest: null };
+            if (window.APP.markers.origin) window.APP.map.removeLayer(window.APP.markers.origin);
+            if (window.APP.markers.dest) window.APP.map.removeLayer(window.APP.markers.dest);
+            window.APP.markers = { origin: null, dest: null };
+            window.APP.calc = { distance: 0, price: 0 };
+            
+            // Reset UI Components
+            document.getElementById('price-card').style.display = 'none';
+            document.getElementById('error-card').style.display = 'none';
+            toggleClearBtn('origin');
+            toggleClearBtn('destination');
+            toggleClearBtn('note');
+            
             const jastipField = document.getElementById('jastip-field');
+            const legalWarning = document.getElementById('legal-warning');
             const originInput = document.getElementById('origin');
             const destInput = document.getElementById('destination');
             
@@ -700,40 +768,36 @@
             const wrapOrg = document.getElementById('wrapper-origin');
             const wrapDst = document.getElementById('wrapper-destination');
 
-            // Reset
+            // Reset Wrappers
             gpsBtn.style.display = 'flex';
             wrapOrg.classList.remove('has-gps');
             wrapDst.classList.remove('has-gps');
+            
+            // Hide Specifics
+            jastipField.style.display = 'none';
+            legalWarning.style.display = 'none';
 
             if (type === 'FOOD_MART') {
                 jastipField.style.display = 'block';
-                // GPS moves to Destination (Home)
                 wrapDst.appendChild(gpsBtn);
                 wrapDst.classList.add('has-gps');
-                
                 originInput.placeholder = "Beli di mana? (Nama Warung/Toko)";
                 destInput.placeholder = "Antar ke mana? (Lokasi Kamu)";
             } else if (type === 'SEND') {
-                jastipField.style.display = 'none';
-                // GPS moves to Origin (Pickup Point)
+                legalWarning.style.display = 'block';
                 wrapOrg.appendChild(gpsBtn);
                 wrapOrg.classList.add('has-gps');
-
-                originInput.placeholder = "Ambil paket di mana? (Cari Lokasi)";
+                originInput.placeholder = "Ambil paket di mana?";
                 destInput.placeholder = "Kirim ke mana?";
-            } else {
-                jastipField.style.display = 'none';
-                // GPS moves to Origin (Here)
+            } else { // RIDE
                 wrapOrg.appendChild(gpsBtn);
                 wrapOrg.classList.add('has-gps');
-
-                originInput.placeholder = "Jemput di mana? (Cari Masjid/Sekolah/Patokan)";
+                originInput.placeholder = "Jemput di mana? (Cari Masjid/Sekolah)";
                 destInput.placeholder = "Antar ke mana?";
             }
             
-            if (window.APP.calc.distance > 0 && window.APP.calc.distance <= 25) {
-                calculatePrice(window.APP.calc.distance);
-            }
+            // Force Button Reset
+            updateLink();
         }
 
         function expandMap() {
