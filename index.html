@@ -50,8 +50,8 @@
         .card-interface { background: white; padding: 24px; min-height: 50vh; }
 
         /* TABS */
-        .tabs { display: flex; gap: 8px; margin-bottom: 24px; background: var(--gray); padding: 4px; border-radius: 16px; border: 1px solid var(--border); }
-        .tab { flex: 1; padding: 12px; text-align: center; border-radius: 12px; font-weight: 700; font-size: 0.9rem; color: #64748B; cursor: pointer; transition: all 0.2s; }
+        .tabs { display: flex; gap: 8px; margin-bottom: 24px; background: var(--gray); padding: 4px; border-radius: 16px; border: 1px solid var(--border); overflow-x: auto; }
+        .tab { flex: 1; padding: 12px; text-align: center; border-radius: 12px; font-weight: 700; font-size: 0.9rem; color: #64748B; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
         .tab.active { background: var(--primary); color: white; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); transform: scale(1.02); }
 
         /* INPUTS & WRAPPERS */
@@ -176,7 +176,8 @@
 
         <div class="tabs">
             <div class="tab active" onclick="setService('RIDE', this)">🛵 OJEK</div>
-            <div class="tab" onclick="setService('FOOD_MART', this)">📦 JASTIP</div>
+            <div class="tab" onclick="setService('SEND', this)">📦 SEND</div>
+            <div class="tab" onclick="setService('FOOD_MART', this)">🛍️ JASTIP</div>
         </div>
 
         <!-- ORIGIN -->
@@ -185,7 +186,7 @@
                 <span class="input-icon">📍</span>
                 <input type="text" id="origin" placeholder="Jemput di mana? (Cari Masjid/Sekolah)" onfocus="expandMap()" oninput="toggleClearBtn('origin')">
                 <div class="clear-btn" id="clear-origin" onclick="clearInput('origin')">✕</div>
-                <!-- GPS Button moves here for OJEK -->
+                <!-- GPS Button moves here for OJEK & SEND -->
             </div>
         </div>
 
@@ -270,7 +271,7 @@
     <script>
         window.APP = {
             service: 'RIDE',
-            config: { RIDE: null, FOOD_MART: null },
+            config: { RIDE: null, FOOD_MART: null, SEND: null },
             places: { origin: null, dest: null },
             calc: { distance: 0, price: 0 },
             map: null,
@@ -297,13 +298,15 @@
 
         async function loadConfigs() {
             try {
-                const [rideSnap, foodSnap] = await Promise.all([
+                const [rideSnap, foodSnap, sendSnap] = await Promise.all([
                     getDoc(doc(db, 'pricing_configs', 'RIDE_v1')),
-                    getDoc(doc(db, 'pricing_configs', 'FOOD_MART_v1'))
+                    getDoc(doc(db, 'pricing_configs', 'FOOD_MART_v1')),
+                    getDoc(doc(db, 'pricing_configs', 'SEND_v1'))
                 ]);
 
                 if (rideSnap.exists()) window.APP.config.RIDE = rideSnap.data();
                 if (foodSnap.exists()) window.APP.config.FOOD_MART = foodSnap.data();
+                if (sendSnap.exists()) window.APP.config.SEND = sendSnap.data();
                 console.log("✅ CONFIG LOADED");
             } catch (e) {
                 console.error("❌ Config Error:", e);
@@ -636,7 +639,10 @@
             const items = document.getElementById('items').value;
             const estPrice = document.getElementById('est-price').value;
             
-            const serviceCode = window.APP.service === 'RIDE' ? 'OJK' : 'JST';
+            let serviceCode = 'OJK';
+            if (window.APP.service === 'FOOD_MART') serviceCode = 'JST';
+            if (window.APP.service === 'SEND') serviceCode = 'SND';
+
             const orderID = `${serviceCode}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
             let msg = `Halo Kak! Order ${window.APP.service}\n` +
@@ -707,6 +713,14 @@
                 
                 originInput.placeholder = "Beli di mana? (Nama Warung/Toko)";
                 destInput.placeholder = "Antar ke mana? (Lokasi Kamu)";
+            } else if (type === 'SEND') {
+                jastipField.style.display = 'none';
+                // GPS moves to Origin (Pickup Point)
+                wrapOrg.appendChild(gpsBtn);
+                wrapOrg.classList.add('has-gps');
+
+                originInput.placeholder = "Ambil paket di mana? (Cari Lokasi)";
+                destInput.placeholder = "Kirim ke mana?";
             } else {
                 jastipField.style.display = 'none';
                 // GPS moves to Origin (Here)
