@@ -973,7 +973,7 @@
             const textBtn = document.getElementById('btn-text');
             const price = window.APP.calc.price;
 
-            // VALIDASI STRICT: Input Kosong = Disable
+            // Validasi input kosong
             const originVal = document.getElementById('origin').value.trim();
             const destVal = document.getElementById('destination').value.trim();
 
@@ -983,15 +983,7 @@
                 return;
             }
 
-            btn.classList.remove('disabled');
-            textBtn.innerText = `GAS ORDER • Rp ${price.toLocaleString('id-ID')}`;
-
-            const note = document.getElementById('note').value;
-            const items = document.getElementById('items').value;
-            const estPrice = document.getElementById('est-price').value;
-
-            // AMBIL KOORDINAT MENTAH DARI GOOGLE PLACES
-            // Kita pake optional chaining (?.) biar gak error kalau null
+            // Ambil Koordinat
             const orgLat = window.APP.places.origin?.geometry?.location?.lat();
             const orgLng = window.APP.places.origin?.geometry?.location?.lng();
             const destLat = window.APP.places.dest?.geometry?.location?.lat();
@@ -1003,40 +995,48 @@
 
             const orderID = `${serviceCode}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
-            let msg = `Halo Kak! Order ${window.APP.service}\n` +
+            // 🔥 FORMAT WA BARU (BOLD & RAPI) 🔥
+            let msg = `Halo Kak! Order *${window.APP.service}*\n` +
                 `================\n` +
-                `ID ORDER : ${orderID}\n` +
+                `*ID ORDER : ${orderID}*\n` +
                 `----------------\n` +
-                `• Jemput : ${document.getElementById('origin').value}\n` +
-                `• Tujuan : ${document.getElementById('destination').value}\n` +
-                `• Koordinat Jemput : ${orgLat},${orgLng}\n` +
-                `• Koordinat Tujuan : ${destLat},${destLng}\n`;
+                `• Jemput : *${originVal}*\n` +
+                `(GPS: ${orgLat}, ${orgLng})\n` + // Koordinat aman pakai prefix GPS
+                `• Tujuan : *${destVal}*\n` +
+                `(GPS: ${destLat}, ${destLng})\n`;
 
+            // Catatan User
+            const note = document.getElementById('note').value;
             if (note) msg += `• Catatan : ${note}\n`;
 
             if (window.APP.service === 'FOOD_MART') {
+                const items = document.getElementById('items').value;
+                const estPrice = document.getElementById('est-price').value;
                 msg += `----------------\n` +
-                    `• Item : ${items}\n` +
-                    `• Est. Harga Barang : Rp ${estPrice || 0}\n`;
+                    `• Item : *${items}*\n` +
+                    `• Est. Harga : Rp ${estPrice || 0}\n`;
             }
 
             msg += `----------------\n` +
-                `• Jarak : ${window.APP.calc.distance} km\n` +
-                `• Ongkir : Rp ${price.toLocaleString('id-ID')}\n` +
+                `• Jarak : *${window.APP.calc.distance} km*\n` +
+                `• Ongkir : *Rp ${price.toLocaleString('id-ID')}*\n` +
                 `================\n` +
                 `Gas jemput?`;
 
+            // Tombol Ready
+            btn.classList.remove('disabled');
+            textBtn.innerText = `GAS ORDER • Rp ${price.toLocaleString('id-ID')}`;
             btn.href = `https://wa.me/${CONFIG_WA}?text=${encodeURIComponent(msg)}`;
 
-            // SAVE HISTORY
+            // Save History Logic (Biarin tetap ada)
             if (window.APP.places.origin && window.APP.places.dest) {
                 const history = {
-                    origin_addr: document.getElementById('origin').value,
-                    origin_lat: window.APP.places.origin.geometry.location.lat(),
-                    origin_lng: window.APP.places.origin.geometry.location.lng(),
-                    dest_addr: document.getElementById('destination').value,
-                    dest_lat: window.APP.places.dest.geometry.location.lat(),
-                    dest_lng: window.APP.places.dest.geometry.location.lng(),
+                    origin_addr: originVal,
+                    origin_lat: orgLat,
+                    origin_lng: orgLng,
+                    dest_addr: destVal,
+                    dest_lat: destLat,
+                    dest_lng: destLng,
                     note: note
                 };
                 localStorage.setItem('bantujeg_history', JSON.stringify(history));
