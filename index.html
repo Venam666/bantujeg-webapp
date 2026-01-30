@@ -973,7 +973,7 @@
             const textBtn = document.getElementById('btn-text');
             const price = window.APP.calc.price;
 
-            // Validasi input kosong
+            // Validasi
             const originVal = document.getElementById('origin').value.trim();
             const destVal = document.getElementById('destination').value.trim();
 
@@ -989,54 +989,54 @@
             const destLat = window.APP.places.dest?.geometry?.location?.lat();
             const destLng = window.APP.places.dest?.geometry?.location?.lng();
 
+            // Mapping Nama Service Biar Enak Dibaca
+            let displayService = window.APP.service;
             let serviceCode = 'OJK';
-            if (window.APP.service === 'FOOD_MART') serviceCode = 'JST';
-            if (window.APP.service === 'SEND') serviceCode = 'SND';
+
+            if (window.APP.service === 'RIDE') { displayService = 'Ojek'; serviceCode = 'OJK'; }
+            if (window.APP.service === 'SEND') { displayService = 'Kirim Barang'; serviceCode = 'SND'; }
+            if (window.APP.service === 'FOOD_MART') { displayService = 'Food & Mart'; serviceCode = 'JST'; }
 
             const orderID = `${serviceCode}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
-            // 🔥 FORMAT WA BARU (BOLD & RAPI) 🔥
-            let msg = `Halo Kak! Order *${window.APP.service}*\n` +
-                `================\n` +
-                `*ID ORDER : ${orderID}*\n` +
+            // 🔥 FORMAT BARU: CLEAN & RINGKAS (NO BOLD) 🔥
+            let msg = `Halo Kak! Order ${displayService}\n` +
+                `ID: ${orderID}\n` +
                 `----------------\n` +
-                `• Jemput : *${originVal}*\n` +
-                `(GPS: ${orgLat}, ${orgLng})\n` + // Koordinat aman pakai prefix GPS
-                `• Tujuan : *${destVal}*\n` +
+                `Asal: ${originVal}\n` +
+                `(GPS: ${orgLat}, ${orgLng})\n` +
+                `Tujuan: ${destVal}\n` +
                 `(GPS: ${destLat}, ${destLng})\n`;
 
-            // Catatan User
+            // Catatan
             const note = document.getElementById('note').value;
-            if (note) msg += `• Catatan : ${note}\n`;
+            if (note) msg += `Catatan: ${note}\n`;
 
+            // Khusus Jastip
             if (window.APP.service === 'FOOD_MART') {
                 const items = document.getElementById('items').value;
                 const estPrice = document.getElementById('est-price').value;
                 msg += `----------------\n` +
-                    `• Item : *${items}*\n` +
-                    `• Est. Harga : Rp ${estPrice || 0}\n`;
+                    `Item: ${items}\n` +
+                    `Est. Harga: Rp ${estPrice || 0}\n`;
             }
 
             msg += `----------------\n` +
-                `• Jarak : *${window.APP.calc.distance} km*\n` +
-                `• Ongkir : *Rp ${price.toLocaleString('id-ID')}*\n` +
+                `Jarak: ${window.APP.calc.distance} km\n` +
+                `Ongkir: Rp ${price.toLocaleString('id-ID')}\n` +
                 `================\n` +
                 `Gas jemput?`;
 
-            // Tombol Ready
+            // Finalisasi Button
             btn.classList.remove('disabled');
             textBtn.innerText = `GAS ORDER • Rp ${price.toLocaleString('id-ID')}`;
             btn.href = `https://wa.me/${CONFIG_WA}?text=${encodeURIComponent(msg)}`;
 
-            // Save History Logic (Biarin tetap ada)
+            // Save History (Tetap jalan di background)
             if (window.APP.places.origin && window.APP.places.dest) {
                 const history = {
-                    origin_addr: originVal,
-                    origin_lat: orgLat,
-                    origin_lng: orgLng,
-                    dest_addr: destVal,
-                    dest_lat: destLat,
-                    dest_lng: destLng,
+                    origin_addr: originVal, origin_lat: orgLat, origin_lng: orgLng,
+                    dest_addr: destVal, dest_lat: destLat, dest_lng: destLng,
                     note: note
                 };
                 localStorage.setItem('bantujeg_history', JSON.stringify(history));
