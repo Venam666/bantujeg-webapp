@@ -706,11 +706,10 @@
         src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAXo3ErccnWYzKPXZsli1j9zsE5_50hO1g&libraries=places,geometry&loading=async"></script>
 
     <script>
-        // 🎯 CENTRAL LOCATION STATE - Single Source of Truth
+        // 🎯 CENTRAL LOCATION STATE - Final Authority after commit
         window.locationState = {
             pickup: { lat: null, lng: null, source: null, address: '' },
-            dropoff: { lat: null, lng: null, source: null, address: '' },
-            activeField: null // 'pickup' or 'dropoff'
+            dropoff: { lat: null, lng: null, source: null, address: '' }
         };
 
         window.APP = {
@@ -723,10 +722,11 @@
             directionsRenderer: null,
             markers: { origin: null, dest: null },
             historyData: null,
+            // 🔒 TRANSACTIONAL PICKER STATE MACHINE
             picker: {
-                type: null,
-                currentLocation: null,
-                geocodeTimer: null,
+                activeField: null,      // 'pickup' or 'dropoff'
+                currentLocation: null,  // { lat, lng } - tracks drag silently
+                locked: false,          // TRUE = no external writes allowed
                 geocodeRequest: null
             }
         };
@@ -967,6 +967,9 @@
         }
 
         window.getCurrentLocation = function (inputType) {
+            // 🔒 PICKER LOCK GUARD - No GPS writes while picker is active
+            if (window.APP.picker.locked) return;
+
             if (!navigator.geolocation) { alert("Browser tidak support GPS"); return; }
 
             const btnEl = document.getElementById('gps-' + inputType);
@@ -1046,6 +1049,9 @@
         }
 
         function handlePlaceSelect(type, ac) {
+            // 🔒 PICKER LOCK GUARD - No writes while picker is active
+            if (window.APP.picker.locked) return;
+
             const place = ac.getPlace();
             if (!place.geometry) return;
 
@@ -1311,15 +1317,14 @@
             }
         }
 
+        // 🔒 TRANSACTIONAL STATE MACHINE - OPEN
         window.openMapPicker = function (type) {
-            window.APP.picker.type = type;
+            // ACTIVATE LOCK - No external writes allowed
+            window.APP.picker.locked = true;
+            window.APP.picker.activeField = type === 'origin' ? 'pickup' : 'dropoff';
 
             const modal = document.getElementById('map-picker-modal');
             modal.classList.add('active');
-
-            // Set active field for routing
-            const field = type === 'origin' ? 'pickup' : 'dropoff';
-            window.locationState.activeField = field;
 
             if (type === 'origin') {
                 document.getElementById('picker-title').innerText = 'Tentukan Titik Jemput';
@@ -1328,6 +1333,9 @@
                 document.getElementById('picker-title').innerText = 'Tentukan Tujuan';
                 document.getElementById('pin-label').innerText = 'Lokasi Tujuan';
             }
+
+            // Reset address display
+            document.getElementById('picker-address').innerText = 'Geser peta untuk memilih lokasi...';
 
             if (!window.APP.pickerMap) {
                 const centerSalatiga = { lat: -7.3305, lng: 110.5084 };
@@ -1353,64 +1361,67 @@
                     fullscreenControl: false
                 });
 
-                // DISABLED: Live geocoding causes DOM reflow loop and map jitter
-                // window.APP.pickerMap.addListener('idle', handlePickerMapIdle);
+                // 🛰 SILENT IDLE TRACKING - No geocode, no UI update, just state
+                window.APP.pickerMap.addListener('idle', function () {
+                    const center = window.APP.pickerMap.getCenter();
+                    window.APP.picker.currentLocation = {
+                        lat: center.lat(),
+                        lng: center.lng()
+                    };
+                });
             }
 
             // FIX JITTER: Wait for modal animation to complete (300ms)
             setTimeout(() => {
-                // Force map resize
                 google.maps.event.trigger(window.APP.pickerMap, "resize");
 
-                let targetCenter;
-                const existingPlace = window.APP.places[type === 'origin' ? 'origin' : 'dest'];
+                // 🧭 SAFE INITIALIZATION - Priority: existing > GPS > default
+                const field = type === 'origin' ? 'origin' : 'dest';
+                const existingPlace = window.APP.places[field];
+                const centerSalatiga = { lat: -7.3305, lng: 110.5084 };
 
                 if (existingPlace && existingPlace.geometry) {
+                    // Use existing confirmed location
                     const lat = existingPlace.geometry.location.lat();
                     const lng = existingPlace.geometry.location.lng();
-                    targetCenter = { lat, lng };
                     window.APP.picker.currentLocation = { lat, lng };
-                    window.APP.pickerMap.setCenter(targetCenter);
+                    window.APP.pickerMap.setCenter({ lat, lng });
                     window.APP.pickerMap.setZoom(18);
-                    // Don't geocode on open - prevents jitter
                 } else if (navigator.geolocation) {
+                    // Try GPS for initial position
+                    window.APP.picker.currentLocation = centerSalatiga; // Fallback immediately
                     navigator.geolocation.getCurrentPosition(
                         (position) => {
                             const lat = position.coords.latitude;
                             const lng = position.coords.longitude;
+                            window.APP.picker.currentLocation = { lat, lng };
                             window.APP.pickerMap.setCenter({ lat, lng });
                             window.APP.pickerMap.setZoom(18);
-                            window.APP.picker.currentLocation = { lat, lng };
-                            // Don't geocode on open - prevents jitter
                         },
                         () => {
-                            const centerSalatiga = { lat: -7.3305, lng: 110.5084 };
                             window.APP.pickerMap.setCenter(centerSalatiga);
                             window.APP.pickerMap.setZoom(17);
-                            window.APP.picker.currentLocation = centerSalatiga;
-                            // Don't geocode on open - prevents jitter
                         }
                     );
                 } else {
-                    const centerSalatiga = { lat: -7.3305, lng: 110.5084 };
+                    // Default to Salatiga center
+                    window.APP.picker.currentLocation = centerSalatiga;
                     window.APP.pickerMap.setCenter(centerSalatiga);
                     window.APP.pickerMap.setZoom(17);
-                    window.APP.picker.currentLocation = centerSalatiga;
-                    // Don't geocode on open - prevents jitter
                 }
             }, 300);
 
             history.pushState({ mapPicker: true }, '', '');
         }
 
+        // 🔒 TRANSACTIONAL STATE MACHINE - CLOSE (releases lock)
         window.closeMapPicker = function () {
             const modal = document.getElementById('map-picker-modal');
             modal.classList.remove('active');
-            window.APP.picker.type = null;
 
-            if (window.APP.picker.geocodeTimer) {
-                clearTimeout(window.APP.picker.geocodeTimer);
-            }
+            // RELEASE LOCK - External writers allowed again
+            window.APP.picker.locked = false;
+            window.APP.picker.activeField = null;
 
             if (history.state && history.state.mapPicker) {
                 history.back();
@@ -1460,22 +1471,26 @@
             });
         }
 
-        // STATELESS confirm button - always clickable, no state lock
+        // 🔐 TRANSACTIONAL STATE MACHINE - COMMIT (single write path)
         window.confirmLocation = function () {
-            const type = window.APP.picker.type;
-            if (!type || !window.APP.picker.currentLocation) return;
+            const activeField = window.APP.picker.activeField;
+            const loc = window.APP.picker.currentLocation;
 
-            const { lat, lng } = window.APP.picker.currentLocation;
+            if (!activeField || !loc) return;
 
-            // Temporarily disable during API call only
+            // Freeze location for commit
+            const lat = loc.lat;
+            const lng = loc.lng;
+            const type = activeField === 'pickup' ? 'origin' : 'destination';
+
+            // Disable button during geocode
             const confirmBtn = document.getElementById('confirm-btn');
             const addressDisplay = document.getElementById('picker-address');
             confirmBtn.disabled = true;
             addressDisplay.innerText = 'Mencari alamat...';
 
-            // Geocode on button press - re-enable button after
+            // Step 1: Reverse geocode once
             performReverseGeocode(lat, lng, (address) => {
-                // ALWAYS re-enable button for reusability
                 confirmBtn.disabled = false;
 
                 if (!address) {
@@ -1483,22 +1498,24 @@
                     return;
                 }
 
-                const inputId = type === 'origin' ? 'origin' : 'destination';
-                document.getElementById(inputId).value = address;
-                toggleClearBtn(inputId);
+                // Step 2: Update input field (display only)
+                document.getElementById(type).value = address;
+                toggleClearBtn(type);
 
-                // \ud83c\udfaf Write to central state with source='manual' (user dragged)
-                const field = type === 'origin' ? 'pickup' : 'dropoff';
-                updateLocationState(field, lat, lng, 'manual', address);
+                // Step 3: COMMIT to central state - this is the ONLY write path
+                updateLocationState(activeField, lat, lng, 'manual', address);
 
-                const placeType = type === 'origin' ? 'origin' : 'dest';
-                updateMarker(placeType, lat, lng);
+                // Step 4: Update main map marker
+                const markerType = activeField === 'pickup' ? 'origin' : 'dest';
+                updateMarker(markerType, lat, lng);
                 expandMap();
 
+                // Step 5: Calculate route if both locations set
                 if (window.APP.places.origin && window.APP.places.dest) {
                     calculateRoute();
                 }
 
+                // Step 6: Close picker (this releases the lock)
                 closeMapPicker();
             });
         }
