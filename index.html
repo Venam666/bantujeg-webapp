@@ -198,6 +198,39 @@
             right: 125px !important;
         }
 
+        /* MAP PICKER BUTTON (NEW) */
+        .map-picker-btn {
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: #EFF6FF;
+            color: #1E40AF;
+            border: 1px solid #DBEAFE;
+            padding: 6px 10px;
+            border-radius: 10px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            cursor: pointer;
+            z-index: 5;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .map-picker-btn:active {
+            transform: translateY(-50%) scale(0.95);
+            background: #DBEAFE;
+        }
+
+        /* When both GPS and Map Picker are visible */
+        .input-wrapper.has-gps .map-picker-btn {
+            right: 125px !important;
+        }
+
         /* CLEAR BUTTON (X) */
         .clear-btn {
             position: absolute;
@@ -443,150 +476,134 @@
             }
         }
 
-        /* === MAP PICKER MODE (GOJEK STYLE) === */
-        .map-picker-btn {
-            position: absolute;
-            right: 48px;
-            top: 50%;
-            transform: translateY(-50%);
+        /* ===== MAP PICKER MODAL STYLES ===== */
+        #map-picker-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
             background: white;
-            color: #10B981;
-            border: 1px solid #D1FAE5;
-            padding: 8px 12px;
-            border-radius: 12px;
-            font-size: 0.75rem;
-            font-weight: 700;
-            cursor: pointer;
-            z-index: 5;
+            display: none;
+            flex-direction: column;
+        }
+
+        #map-picker-modal.active {
+            display: flex;
+        }
+
+        .picker-header {
+            background: white;
+            padding: 16px 20px;
+            border-bottom: 1px solid #e5e7eb;
             display: flex;
             align-items: center;
-            gap: 6px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-            transition: all 0.2s;
+            gap: 12px;
         }
 
-        .map-picker-btn:active {
-            transform: translateY(-50%) scale(0.95);
-            background: #ECFDF5;
+        .picker-header h3 {
+            flex: 1;
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--dark);
         }
 
-        /* Adjust clear button position when picker button exists */
-        .input-wrapper.has-picker .clear-btn {
-            right: 135px !important;
+        .close-modal-btn {
+            background: #F3F4F6;
+            color: #6B7280;
+            border: none;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 1.2rem;
+            font-weight: bold;
         }
 
-        /* Center Pin Marker (Hidden by default) */
-        .center-marker {
+        .close-modal-btn:active {
+            background: #E5E7EB;
+        }
+
+        .picker-map-container {
+            flex: 1;
+            position: relative;
+        }
+
+        #picker-map {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* CENTER PIN (FIXED) */
+        .center-pin {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -100%);
-            width: 40px;
-            height: 50px;
             z-index: 10;
-            display: none;
             pointer-events: none;
-            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
-            animation: bounce 0.6s ease-out;
-        }
-
-        @keyframes bounce {
-
-            0%,
-            100% {
-                transform: translate(-50%, -100%);
-            }
-
-            50% {
-                transform: translate(-50%, -110%);
-            }
-        }
-
-        /* Floating Address Preview Toast */
-        .address-toast {
-            position: absolute;
-            top: 80px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: white;
-            padding: 12px 20px;
-            border-radius: 16px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-            z-index: 20;
-            max-width: 85%;
-            display: none;
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: var(--dark);
             text-align: center;
+        }
+
+        .pin-label {
+            background: var(--primary);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+            box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+        }
+
+        .pin-icon {
+            font-size: 3rem;
+            filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.2));
+        }
+
+        /* FOOTER PANEL */
+        .picker-footer {
+            background: white;
+            padding: 16px 20px 24px;
+            border-top: 1px solid #e5e7eb;
+            box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
+        }
+
+        .address-display {
+            background: var(--gray);
+            padding: 12px 14px;
+            border-radius: 12px;
+            margin-bottom: 12px;
+            font-size: 0.85rem;
+            color: var(--dark);
+            font-weight: 500;
+            min-height: 44px;
             line-height: 1.4;
         }
 
-        /* Picker Mode Buttons */
-        .picker-confirm-btn {
-            position: fixed;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
+        .confirm-location-btn {
+            width: 100%;
             background: var(--primary);
             color: white;
-            padding: 16px 48px;
-            border-radius: 16px;
+            border: none;
+            padding: 14px;
+            border-radius: 12px;
             font-weight: 700;
             font-size: 1rem;
             cursor: pointer;
-            z-index: 30;
-            display: none;
-            box-shadow: 0 10px 30px rgba(16, 185, 129, 0.4);
-            border: none;
-            transition: transform 0.2s;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+            transition: all 0.2s;
         }
 
-        .picker-confirm-btn:active {
-            transform: translateX(-50%) scale(0.98);
+        .confirm-location-btn:active {
+            transform: scale(0.98);
         }
 
-        .picker-back-btn {
-            position: fixed;
-            top: 20px;
-            left: 20px;
-            background: white;
-            color: var(--dark);
-            padding: 12px 20px;
-            border-radius: 12px;
-            font-weight: 700;
-            font-size: 0.9rem;
-            cursor: pointer;
-            z-index: 30;
-            display: none;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            border: 1px solid var(--border);
-            transition: transform 0.2s;
-        }
-
-        .picker-back-btn:active {
-            transform: scale(0.95);
-        }
-
-        /* Fullscreen Map Mode */
-        #map-wrapper.fullscreen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            padding: 0;
-            z-index: 999;
-        }
-
-        #map-wrapper.fullscreen #map-container {
-            height: 100vh;
-            border-radius: 0;
-        }
-
-        /* Route Polyline Renderer Container */
-        #route-renderer {
-            display: none;
+        .confirm-location-btn:disabled {
+            background: #cbd5e1;
+            cursor: not-allowed;
+            box-shadow: none;
         }
     </style>
 </head>
@@ -604,27 +621,7 @@
     <div id="map-wrapper">
         <div id="map-container">
             <div id="map"></div>
-
-            <!-- Center Pin Marker (Gojek Style) -->
-            <svg class="center-marker" viewBox="0 0 24 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 0C5.373 0 0 5.373 0 12c0 9 12 24 12 24s12-15 12-24c0-6.627-5.373-12-12-12z"
-                    fill="#10B981" />
-                <circle cx="12" cy="12" r="5" fill="white" />
-            </svg>
-
-            <!-- Floating Address Preview -->
-            <div class="address-toast" id="address-toast">
-                📍 Memuat lokasi...
-            </div>
         </div>
-
-        <!-- Picker Mode Controls -->
-        <button class="picker-back-btn" id="picker-back-btn" onclick="exitPickerMode()">
-            ← Batal
-        </button>
-        <button class="picker-confirm-btn" id="picker-confirm-btn" onclick="confirmPickedLocation()">
-            ✓ KONFIRMASI LOKASI
-        </button>
     </div>
 
     <div class="card-interface">
@@ -640,25 +637,21 @@
         </div>
 
         <div class="input-group">
-            <div class="input-wrapper has-picker" id="wrapper-origin">
+            <div class="input-wrapper" id="wrapper-origin">
                 <span class="input-icon">📍</span>
                 <input type="text" id="origin" placeholder="Jemput di mana? (Cari Masjid/Sekolah)" onfocus="expandMap()"
                     oninput="handleInput('origin')">
                 <div class="clear-btn" id="clear-origin" onclick="clearInput('origin')">✕</div>
-                <div class="map-picker-btn" onclick="openMapPicker('origin')">
-                    🗺️ Peta
-                </div>
+                <div class="map-picker-btn" onclick="openMapPicker('origin')">🗺️ Pilih lewat peta</div>
             </div>
         </div>
 
         <div class="input-group">
-            <div class="input-wrapper has-picker" id="wrapper-destination">
+            <div class="input-wrapper" id="wrapper-destination">
                 <span class="input-icon">🏁</span>
                 <input type="text" id="destination" placeholder="Antar ke mana?" oninput="handleInput('destination')">
                 <div class="clear-btn" id="clear-destination" onclick="clearInput('destination')">✕</div>
-                <div class="map-picker-btn" onclick="openMapPicker('destination')">
-                    🗺️ Peta
-                </div>
+                <div class="map-picker-btn" onclick="openMapPicker('destination')">🗺️ Pilih lewat peta</div>
             </div>
         </div>
 
@@ -726,6 +719,25 @@
         </a>
     </div>
 
+    <!-- ===== MAP PICKER MODAL ===== -->
+    <div id="map-picker-modal">
+        <div class="picker-header">
+            <button class="close-modal-btn" onclick="closeMapPicker()">✕</button>
+            <h3 id="picker-title">Tentukan Titik Jemput</h3>
+        </div>
+        <div class="picker-map-container">
+            <div id="picker-map"></div>
+            <div class="center-pin">
+                <div class="pin-label" id="pin-label">Lokasi Jemput</div>
+                <div class="pin-icon">📍</div>
+            </div>
+        </div>
+        <div class="picker-footer">
+            <div class="address-display" id="picker-address">Geser peta untuk memilih lokasi...</div>
+            <button class="confirm-location-btn" id="confirm-btn" onclick="confirmLocation()">KONFIRMASI LOKASI</button>
+        </div>
+    </div>
+
     <script
         src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAXo3ErccnWYzKPXZsli1j9zsE5_50hO1g&libraries=places,geometry&loading=async"></script>
 
@@ -736,17 +748,16 @@
             places: { origin: null, dest: null },
             calc: { distance: 0, price: 0 },
             map: null,
+            pickerMap: null,
             markers: { origin: null, dest: null },
             historyData: null,
             bounds: null,
-            // Picker Mode State
-            pickerMode: {
-                active: false,
-                targetField: null, // 'origin' or 'destination'
-                selectedPlace: null,
-                selectedLatLng: null
-            },
-            directionsRenderer: null
+            picker: {
+                type: null, // 'origin' or 'destination'
+                currentLocation: null,
+                geocodeTimer: null,
+                geocodeRequest: null
+            }
         };
     </script>
 
@@ -795,8 +806,8 @@
             window.APP.map = new google.maps.Map(document.getElementById("map"), {
                 center: centerSalatiga,
                 zoom: 14,
-                disableDefaultUI: true, // Biar bersih kayak Leaflet
-                clickableIcons: false,  // Gak perlu klik ikon bisnis Google
+                disableDefaultUI: true,
+                clickableIcons: false,
                 zoomControl: false,
                 mapTypeControl: false,
                 streetViewControl: false,
@@ -835,7 +846,6 @@
             if (data.note) document.getElementById('note').value = data.note;
 
             // Reconstruct Place Objects (Using Google Geometry)
-            // Note: Since history only has lat/lng, we reconstruct a simple object
             window.APP.places.origin = {
                 geometry: { location: new google.maps.LatLng(data.origin_lat, data.origin_lng) },
                 formatted_address: data.origin_addr
@@ -875,15 +885,13 @@
         // --- UI: INPUT HANDLERS ---
         window.handleInput = function (id) {
             toggleClearBtn(id);
-            // VALIDASI: Kalau user hapus teks, reset harga & button
             const val = document.getElementById(id).value;
             if (val.trim() === '') {
-                // Determine which type it is
                 if (id === 'origin' || id === 'destination') {
                     const type = id === 'origin' ? 'origin' : 'dest';
                     window.APP.places[type] = null;
                     if (window.APP.markers[type]) {
-                        window.APP.markers[type].setMap(null); // GOOGLE: setMap(null) removes marker
+                        window.APP.markers[type].setMap(null);
                         window.APP.markers[type] = null;
                     }
                     window.APP.calc.price = 0;
@@ -909,17 +917,13 @@
                 const type = id === 'origin' ? 'origin' : 'dest';
                 window.APP.places[type] = null;
                 if (window.APP.markers[type]) {
-                    window.APP.markers[type].setMap(null); // GOOGLE: setMap(null)
+                    window.APP.markers[type].setMap(null);
                     window.APP.markers[type] = null;
                 }
-                // Clear route visualization if exists
-                if (window.APP.directionsRenderer) {
-                    window.APP.directionsRenderer.setMap(null);
-                }
-                window.APP.calc.price = 0; // Reset Price
+                window.APP.calc.price = 0;
                 document.getElementById('price-card').style.display = 'none';
                 document.getElementById('error-card').style.display = 'none';
-                updateLink(); // Update Button State
+                updateLink();
             }
         }
 
@@ -931,31 +935,30 @@
                 ? 'https://cdn-icons-png.flaticon.com/512/684/684908.png'
                 : 'https://cdn-icons-png.flaticon.com/512/684/684913.png';
 
-            // GOOGLE MAPS MARKER
-            if (markers[type]) markers[type].setMap(null); // Clear old marker
+            if (markers[type]) markers[type].setMap(null);
 
             markers[type] = new google.maps.Marker({
                 position: { lat: lat, lng: lng },
                 map: map,
                 icon: {
                     url: iconUrl,
-                    scaledSize: new google.maps.Size(40, 40) // Resize icon biar pas
+                    scaledSize: new google.maps.Size(40, 40)
                 },
                 label: {
                     text: type === 'origin' ? "Jemput" : "Tujuan",
                     color: "black",
                     fontWeight: "bold",
                     fontSize: "12px",
-                    className: "map-tooltip" // Class ini nanti diabaikan Google tp label native muncul
+                    className: "map-tooltip"
                 }
             });
 
-            // FIT BOUNDS (ZOOM TO FIT 2 MARKERS)
+            // FIT BOUNDS
             if (markers.origin && markers.dest) {
                 const bounds = new google.maps.LatLngBounds();
                 bounds.extend(markers.origin.getPosition());
                 bounds.extend(markers.dest.getPosition());
-                map.fitBounds(bounds, 50); // Padding 50px
+                map.fitBounds(bounds, 50);
             } else {
                 map.setCenter({ lat: lat, lng: lng });
                 map.setZoom(16);
@@ -1007,12 +1010,14 @@
         }
 
         function initAutocomplete() {
-            // GOOGLE PLACES AUTOCOMPLETE
+            // UPDATED GEOFENCING: Salatiga + 50km
+            const bounds = new google.maps.LatLngBounds(
+                new google.maps.LatLng(-7.80, 110.00), // Southwest
+                new google.maps.LatLng(-6.80, 111.00)  // Northeast
+            );
+
             const options = {
-                bounds: new google.maps.LatLngBounds(
-                    new google.maps.LatLng(-7.60, 110.23),
-                    new google.maps.LatLng(-7.06, 110.77)
-                ),
+                bounds: bounds,
                 componentRestrictions: { country: "id" },
                 fields: ["geometry", "name", "formatted_address"],
                 strictBounds: true
@@ -1021,7 +1026,6 @@
             const acOrigin = new google.maps.places.Autocomplete(document.getElementById('origin'), options);
             const acDest = new google.maps.places.Autocomplete(document.getElementById('destination'), options);
 
-            // Bind to Map for biasing
             acOrigin.bindTo('bounds', window.APP.map);
             acDest.bindTo('bounds', window.APP.map);
 
@@ -1048,7 +1052,6 @@
             const originVal = document.getElementById('origin').value.trim();
             const destVal = document.getElementById('destination').value.trim();
 
-            // VALIDASI: Cek text kosong walaupun object place ada
             if (!origin || !dest || originVal === '' || destVal === '') {
                 window.APP.calc.price = 0;
                 updateLink();
@@ -1058,20 +1061,17 @@
             setLoading(true);
             document.getElementById('error-card').style.display = 'none';
 
-            // GOOGLE DIRECTIONS SERVICE
             const directionsService = new google.maps.DirectionsService();
             directionsService.route({
                 origin: origin.geometry.location,
                 destination: dest.geometry.location,
-                travelMode: google.maps.TravelMode.TWO_WHEELER, // Mode Motor
+                travelMode: google.maps.TravelMode.TWO_WHEELER,
                 avoidTolls: true
             }, (res, status) => {
                 setLoading(false);
                 if (status === 'OK') {
-                    // Ambil jarak dari Google Route
                     const googleKm = res.routes[0].legs[0].distance.value / 1000;
 
-                    // Hitung garis lurus (Straight Line) buat validasi detour
                     const straightKm = google.maps.geometry.spherical.computeDistanceBetween(
                         res.routes[0].legs[0].start_location,
                         res.routes[0].legs[0].end_location
@@ -1091,32 +1091,6 @@
                         showError("Kejauhan Boss! Max 25km ya.");
                     } else {
                         calculatePrice(finalKm);
-
-                        // === ROUTE VISUALIZATION (BLUE LINE) ===
-                        // Hide center pin (we're viewing route, not picking)
-                        document.querySelector('.center-marker').style.display = 'none';
-
-                        // Initialize DirectionsRenderer if not exists
-                        if (!window.APP.directionsRenderer) {
-                            window.APP.directionsRenderer = new google.maps.DirectionsRenderer({
-                                map: window.APP.map,
-                                suppressMarkers: true, // We use custom markers
-                                polylineOptions: {
-                                    strokeColor: '#3B82F6', // Blue route line
-                                    strokeWeight: 5,
-                                    strokeOpacity: 0.8
-                                }
-                            });
-                        }
-
-                        // Render the route
-                        window.APP.directionsRenderer.setDirections(res);
-
-                        // Fit bounds to show entire route
-                        const bounds = new google.maps.LatLngBounds();
-                        bounds.extend(res.routes[0].legs[0].start_location);
-                        bounds.extend(res.routes[0].legs[0].end_location);
-                        window.APP.map.fitBounds(bounds, 50); // 50px padding
                     }
                 } else {
                     console.error("Directions Failed:", status);
@@ -1161,7 +1135,6 @@
             price = Math.ceil(price / 500) * 500;
             window.APP.calc.price = price;
 
-            // PSYCHOLOGY: FAKE PRICE
             const fakePrice = Math.ceil((price * 1.25) / 1000) * 1000;
             document.getElementById('fake-price').innerText = `Rp ${fakePrice.toLocaleString('id-ID')}`;
 
@@ -1177,7 +1150,6 @@
             const textBtn = document.getElementById('btn-text');
             const price = window.APP.calc.price;
 
-            // Validasi
             const originVal = document.getElementById('origin').value.trim();
             const destVal = document.getElementById('destination').value.trim();
 
@@ -1187,13 +1159,12 @@
                 return;
             }
 
-            // Ambil Koordinat
+            // ENSURE COORDINATES ARE FROM window.APP.places
             const orgLat = window.APP.places.origin?.geometry?.location?.lat();
             const orgLng = window.APP.places.origin?.geometry?.location?.lng();
             const destLat = window.APP.places.dest?.geometry?.location?.lat();
             const destLng = window.APP.places.dest?.geometry?.location?.lng();
 
-            // Mapping Nama Service Biar Enak Dibaca
             let displayService = window.APP.service;
             let serviceCode = 'OJK';
 
@@ -1203,7 +1174,6 @@
 
             const orderID = `${serviceCode}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
-            // 🔥 FORMAT BARU: CLEAN & RINGKAS (NO BOLD) 🔥
             let msg = `Halo Kak! Order ${displayService}\n` +
                 `ID: ${orderID}\n` +
                 `----------------\n` +
@@ -1212,11 +1182,9 @@
                 `Tujuan: ${destVal}\n` +
                 `(GPS: ${destLat}, ${destLng})\n`;
 
-            // Catatan
             const note = document.getElementById('note').value;
             if (note) msg += `Catatan: ${note}\n`;
 
-            // Khusus Jastip
             if (window.APP.service === 'FOOD_MART') {
                 const items = document.getElementById('items').value;
                 const estPrice = document.getElementById('est-price').value;
@@ -1231,12 +1199,11 @@
                 `================\n` +
                 `Gas jemput?`;
 
-            // Finalisasi Button
             btn.classList.remove('disabled');
             textBtn.innerText = `GAS ORDER • Rp ${price.toLocaleString('id-ID')}`;
             btn.href = `https://wa.me/${CONFIG_WA}?text=${encodeURIComponent(msg)}`;
 
-            // Save History (Tetap jalan di background)
+            // Save History
             if (window.APP.places.origin && window.APP.places.dest) {
                 const history = {
                     origin_addr: originVal, origin_lat: orgLat, origin_lng: orgLng,
@@ -1250,31 +1217,23 @@
         function setService(type, el) {
             window.APP.service = type;
 
-            // Visual Tab Active
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             if (el) el.classList.add('active');
             else document.querySelector('.tab').classList.add('active');
 
-            // === TAB ISOLATION (RESET EVERYTHING) ===
+            // Reset Everything
             document.getElementById('origin').value = '';
             document.getElementById('destination').value = '';
             document.getElementById('note').value = '';
             document.getElementById('items').value = '';
             document.getElementById('est-price').value = '';
 
-            // Reset State & Map
             window.APP.places = { origin: null, dest: null };
-            // Clear Google Markers
             if (window.APP.markers.origin) window.APP.markers.origin.setMap(null);
             if (window.APP.markers.dest) window.APP.markers.dest.setMap(null);
             window.APP.markers = { origin: null, dest: null };
-            // Clear route visualization
-            if (window.APP.directionsRenderer) {
-                window.APP.directionsRenderer.setMap(null);
-            }
             window.APP.calc = { distance: 0, price: 0 };
 
-            // Reset UI Components
             document.getElementById('price-card').style.display = 'none';
             document.getElementById('error-card').style.display = 'none';
             toggleClearBtn('origin');
@@ -1286,17 +1245,14 @@
             const originInput = document.getElementById('origin');
             const destInput = document.getElementById('destination');
 
-            // Logic Dynamic GPS
             const gpsBtn = document.getElementById('btn-gps');
             const wrapOrg = document.getElementById('wrapper-origin');
             const wrapDst = document.getElementById('wrapper-destination');
 
-            // Reset Wrappers
             gpsBtn.style.display = 'flex';
             wrapOrg.classList.remove('has-gps');
             wrapDst.classList.remove('has-gps');
 
-            // Hide Specifics
             jastipField.style.display = 'none';
             legalWarning.style.display = 'none';
 
@@ -1312,14 +1268,13 @@
                 wrapOrg.classList.add('has-gps');
                 originInput.placeholder = "Ambil paket di mana?";
                 destInput.placeholder = "Kirim ke mana?";
-            } else { // RIDE
+            } else {
                 wrapOrg.appendChild(gpsBtn);
                 wrapOrg.classList.add('has-gps');
                 originInput.placeholder = "Jemput di mana? (Cari Masjid/Sekolah)";
                 destInput.placeholder = "Antar ke mana?";
             }
 
-            // Force Button Reset
             updateLink();
         }
 
@@ -1339,178 +1294,204 @@
             }
         }
 
-        // === MAP PICKER MODE FUNCTIONS (GOJEK STYLE) ===
+        // ===== MAP PICKER MODAL FUNCTIONS =====
 
-        window.openMapPicker = function (fieldType) {
-            const pickerState = window.APP.pickerMode;
-            pickerState.active = true;
-            pickerState.targetField = fieldType;
+        window.openMapPicker = function (type) {
+            window.APP.picker.type = type;
 
-            // Hide Dashboard UI
-            document.querySelector('header').style.display = 'none';
-            document.querySelector('.card-interface').style.display = 'none';
-            document.querySelector('.bottom-bar').style.display = 'none';
+            const modal = document.getElementById('map-picker-modal');
+            modal.classList.add('active');
 
-            // Fullscreen Map
-            const mapWrapper = document.getElementById('map-wrapper');
-            mapWrapper.classList.add('fullscreen');
-
-            // Show Picker UI Elements
-            document.querySelector('.center-marker').style.display = 'block';
-            document.getElementById('address-toast').style.display = 'block';
-            document.getElementById('picker-confirm-btn').style.display = 'block';
-            document.getElementById('picker-back-btn').style.display = 'block';
-
-            // Hide existing markers (we're in picker mode, not route mode)
-            if (window.APP.markers.origin) window.APP.markers.origin.setVisible(false);
-            if (window.APP.markers.dest) window.APP.markers.dest.setVisible(false);
-
-            // Hide route if exists
-            if (window.APP.directionsRenderer) {
-                window.APP.directionsRenderer.setMap(null);
-            }
-
-            // Pan to existing location or user's current location
-            const existingPlace = window.APP.places[fieldType === 'origin' ? 'origin' : 'dest'];
-            if (existingPlace && existingPlace.geometry) {
-                window.APP.map.setCenter(existingPlace.geometry.location);
-                window.APP.map.setZoom(16);
+            // Update UI labels
+            if (type === 'origin') {
+                document.getElementById('picker-title').innerText = 'Tentukan Titik Jemput';
+                document.getElementById('pin-label').innerText = 'Lokasi Jemput';
             } else {
-                // Try to get user location
-                if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition(
-                        (position) => {
-                            const userLoc = {
-                                lat: position.coords.latitude,
-                                lng: position.coords.longitude
-                            };
-                            window.APP.map.setCenter(userLoc);
-                            window.APP.map.setZoom(16);
-                        },
-                        () => {
-                            // Fallback to Salatiga center
-                            window.APP.map.setCenter({ lat: -7.3305, lng: 110.5084 });
-                            window.APP.map.setZoom(14);
-                        }
-                    );
-                } else {
-                    window.APP.map.setCenter({ lat: -7.3305, lng: 110.5084 });
-                    window.APP.map.setZoom(14);
-                }
+                document.getElementById('picker-title').innerText = 'Tentukan Tujuan';
+                document.getElementById('pin-label').innerText = 'Lokasi Tujuan';
             }
 
-            // Add map drag listener
-            google.maps.event.addListenerOnce(window.APP.map, 'idle', () => {
-                // Initial reverse geocode
-                reverseGeocodeCenter();
-
-                // Listen for subsequent drags
-                google.maps.event.addListener(window.APP.map, 'idle', () => {
-                    if (pickerState.active) {
-                        reverseGeocodeCenter();
-                    }
+            // Initialize picker map if not already
+            if (!window.APP.pickerMap) {
+                const centerSalatiga = { lat: -7.3305, lng: 110.5084 };
+                window.APP.pickerMap = new google.maps.Map(document.getElementById("picker-map"), {
+                    center: centerSalatiga,
+                    zoom: 17,
+                    disableDefaultUI: true,
+                    clickableIcons: false,
+                    zoomControl: true,
+                    mapTypeControl: false,
+                    streetViewControl: false,
+                    fullscreenControl: false
                 });
-            });
-        };
 
-        function reverseGeocodeCenter() {
-            const center = window.APP.map.getCenter();
+                // Listen for map idle event (after drag)
+                window.APP.pickerMap.addListener('idle', handlePickerMapIdle);
+            }
+
+            // Set initial position
+            let initialLat, initialLng;
+            const existingPlace = window.APP.places[type === 'origin' ? 'origin' : 'dest'];
+
+            if (existingPlace && existingPlace.geometry) {
+                initialLat = existingPlace.geometry.location.lat();
+                initialLng = existingPlace.geometry.location.lng();
+            } else if (navigator.geolocation) {
+                // Try to get current GPS location
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+                        window.APP.pickerMap.setCenter({ lat, lng });
+                        window.APP.pickerMap.setZoom(18);
+                        window.APP.picker.currentLocation = { lat, lng };
+                        performReverseGeocode(lat, lng);
+                    },
+                    () => {
+                        // Fallback to Salatiga center
+                        const centerSalatiga = { lat: -7.3305, lng: 110.5084 };
+                        window.APP.pickerMap.setCenter(centerSalatiga);
+                        window.APP.pickerMap.setZoom(17);
+                        window.APP.picker.currentLocation = centerSalatiga;
+                        performReverseGeocode(centerSalatiga.lat, centerSalatiga.lng);
+                    }
+                );
+            } else {
+                const centerSalatiga = { lat: -7.3305, lng: 110.5084 };
+                initialLat = centerSalatiga.lat;
+                initialLng = centerSalatiga.lng;
+                window.APP.pickerMap.setCenter({ lat: initialLat, lng: initialLng });
+                window.APP.pickerMap.setZoom(17);
+                window.APP.picker.currentLocation = { lat: initialLat, lng: initialLng };
+                performReverseGeocode(initialLat, initialLng);
+            }
+
+            if (initialLat && initialLng) {
+                window.APP.pickerMap.setCenter({ lat: initialLat, lng: initialLng });
+                window.APP.pickerMap.setZoom(18);
+                window.APP.picker.currentLocation = { lat: initialLat, lng: initialLng };
+                performReverseGeocode(initialLat, initialLng);
+            }
+
+            // Push history state for back button
+            history.pushState({ mapPicker: true }, '', '');
+        }
+
+        window.closeMapPicker = function () {
+            const modal = document.getElementById('map-picker-modal');
+            modal.classList.remove('active');
+            window.APP.picker.type = null;
+
+            // Clear timer
+            if (window.APP.picker.geocodeTimer) {
+                clearTimeout(window.APP.picker.geocodeTimer);
+            }
+
+            // Remove history state if still on it
+            if (history.state && history.state.mapPicker) {
+                history.back();
+            }
+        }
+
+        function handlePickerMapIdle() {
+            // Get center of map
+            const center = window.APP.pickerMap.getCenter();
             const lat = center.lat();
             const lng = center.lng();
 
-            // Update state
-            window.APP.pickerMode.selectedLatLng = { lat, lng };
+            window.APP.picker.currentLocation = { lat, lng };
 
-            // Show loading in toast
-            document.getElementById('address-toast').innerText = '📍 Memuat alamat...';
+            // Debounce geocoding (wait 500ms after user stops dragging)
+            if (window.APP.picker.geocodeTimer) {
+                clearTimeout(window.APP.picker.geocodeTimer);
+            }
 
-            // Reverse Geocode
+            window.APP.picker.geocodeTimer = setTimeout(() => {
+                performReverseGeocode(lat, lng);
+            }, 500);
+        }
+
+        function performReverseGeocode(lat, lng) {
+            // Cancel previous request if exists (anti-race condition)
+            if (window.APP.picker.geocodeRequest) {
+                // Note: Google Geocoder doesn't have abort, but we can ignore old results
+                window.APP.picker.geocodeRequest = null;
+            }
+
+            const addressDisplay = document.getElementById('picker-address');
+            addressDisplay.innerText = 'Mencari alamat...';
+
             const geocoder = new google.maps.Geocoder();
-            geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-                if (status === 'OK' && results[0]) {
-                    const address = cleanAddress(results[0].formatted_address);
-                    document.getElementById('address-toast').innerText = `📍 ${address}`;
+            const requestId = Date.now(); // Simple request tracking
+            window.APP.picker.geocodeRequest = requestId;
 
-                    // Store the place object
-                    window.APP.pickerMode.selectedPlace = results[0];
+            geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+                // Ignore if this is not the latest request
+                if (window.APP.picker.geocodeRequest !== requestId) {
+                    return;
+                }
+
+                if (status === "OK" && results[0]) {
+                    const address = cleanAddress(results[0].formatted_address);
+                    addressDisplay.innerText = address;
+                    document.getElementById('confirm-btn').disabled = false;
                 } else {
-                    document.getElementById('address-toast').innerText = '📍 Gagal memuat alamat';
+                    addressDisplay.innerText = 'Gagal mendapatkan alamat. Coba geser peta lagi.';
+                    document.getElementById('confirm-btn').disabled = true;
                 }
             });
         }
 
-        window.confirmPickedLocation = function () {
-            const pickerState = window.APP.pickerMode;
-            if (!pickerState.selectedPlace || !pickerState.selectedLatLng) {
-                alert('Lokasi belum dipilih. Geser peta untuk memilih lokasi.');
-                return;
-            }
+        window.confirmLocation = function () {
+            const type = window.APP.picker.type;
+            if (!type || !window.APP.picker.currentLocation) return;
 
-            const fieldType = pickerState.targetField;
-            const inputId = fieldType === 'origin' ? 'origin' : 'destination';
-            const placeType = fieldType === 'origin' ? 'origin' : 'dest';
+            const { lat, lng } = window.APP.picker.currentLocation;
+            const address = document.getElementById('picker-address').innerText;
 
             // Update input field
-            const cleanedAddress = cleanAddress(pickerState.selectedPlace.formatted_address);
-            document.getElementById(inputId).value = cleanedAddress;
+            const inputId = type === 'origin' ? 'origin' : 'destination';
+            document.getElementById(inputId).value = address;
             toggleClearBtn(inputId);
 
-            // Save to APP state
-            window.APP.places[placeType] = pickerState.selectedPlace;
+            // Update APP.places with new geometry
+            const placeType = type === 'origin' ? 'origin' : 'dest';
+            window.APP.places[placeType] = {
+                geometry: {
+                    location: new google.maps.LatLng(lat, lng)
+                },
+                formatted_address: address
+            };
 
-            // Update marker
-            updateMarker(placeType, pickerState.selectedLatLng.lat, pickerState.selectedLatLng.lng);
+            // Update marker on main map
+            updateMarker(placeType, lat, lng);
+            expandMap();
 
-            // Exit picker mode
-            exitPickerMode();
-
-            // Trigger route calculation if both points exist
+            // Recalculate route if both points exist
             if (window.APP.places.origin && window.APP.places.dest) {
                 calculateRoute();
             }
-        };
 
-        window.exitPickerMode = function () {
-            const pickerState = window.APP.pickerMode;
-            pickerState.active = false;
-            pickerState.targetField = null;
-            pickerState.selectedPlace = null;
-            pickerState.selectedLatLng = null;
+            // Close modal
+            closeMapPicker();
+        }
 
-            // Show Dashboard UI
-            document.querySelector('header').style.display = 'flex';
-            document.querySelector('.card-interface').style.display = 'block';
-            document.querySelector('.bottom-bar').style.display = 'block';
-
-            // Exit Fullscreen Map
-            const mapWrapper = document.getElementById('map-wrapper');
-            mapWrapper.classList.remove('fullscreen');
-
-            // Hide Picker UI Elements
-            document.querySelector('.center-marker').style.display = 'none';
-            document.getElementById('address-toast').style.display = 'none';
-            document.getElementById('picker-confirm-btn').style.display = 'none';
-            document.getElementById('picker-back-btn').style.display = 'none';
-
-            // Show existing markers again
-            if (window.APP.markers.origin) window.APP.markers.origin.setVisible(true);
-            if (window.APP.markers.dest) window.APP.markers.dest.setVisible(true);
-
-            // Restore route if both markers exist
-            if (window.APP.markers.origin && window.APP.markers.dest && window.APP.directionsRenderer) {
-                window.APP.directionsRenderer.setMap(window.APP.map);
+        // Handle back button
+        window.addEventListener('popstate', function (event) {
+            const modal = document.getElementById('map-picker-modal');
+            if (modal.classList.contains('active')) {
+                closeMapPicker();
+                // Prevent double back
+                event.preventDefault();
             }
-        };
+        });
 
-        // Wait for window load to ensure Google script is ready
+        // Wait for window load
         window.onload = () => {
-            // Google Maps script loads async, so we assume initMap is called via callback or manually if needed
-            // But since we use defer/async on script tag, we might need to check if google object exists
             if (typeof google !== 'undefined') {
                 initMap();
                 initAutocomplete();
             } else {
-                // Poll for Google
                 const checkGoogle = setInterval(() => {
                     if (typeof google !== 'undefined') {
                         clearInterval(checkGoogle);
