@@ -1451,6 +1451,7 @@
                     window.APP.picker.currentLocation = { lat, lng };
                     window.APP.pickerMap.panTo(targetCenter);
                     window.APP.pickerMap.setZoom(18);
+                    // Show static placeholder
                     performReverseGeocode(lat, lng);
                 } else if (navigator.geolocation) {
                     navigator.geolocation.getCurrentPosition(
@@ -1460,6 +1461,7 @@
                             window.APP.pickerMap.panTo({ lat, lng });
                             window.APP.pickerMap.setZoom(18);
                             window.APP.picker.currentLocation = { lat, lng };
+                            // Show static placeholder
                             performReverseGeocode(lat, lng);
                         },
                         () => {
@@ -1467,6 +1469,7 @@
                             window.APP.pickerMap.panTo(centerSalatiga);
                             window.APP.pickerMap.setZoom(17);
                             window.APP.picker.currentLocation = centerSalatiga;
+                            // Show static placeholder
                             performReverseGeocode(centerSalatiga.lat, centerSalatiga.lng);
                         }
                     );
@@ -1475,6 +1478,7 @@
                     window.APP.pickerMap.panTo(centerSalatiga);
                     window.APP.pickerMap.setZoom(17);
                     window.APP.picker.currentLocation = centerSalatiga;
+                    // Show static placeholder
                     performReverseGeocode(centerSalatiga.lat, centerSalatiga.lng);
                 }
             }, 300);
@@ -1501,43 +1505,26 @@
             const lat = center.lat();
             const lng = center.lng();
 
+            // Save coordinates (GPS still updates live)
             window.APP.picker.currentLocation = { lat, lng };
 
-            if (window.APP.picker.geocodeTimer) {
-                clearTimeout(window.APP.picker.geocodeTimer);
-            }
-
-            window.APP.picker.geocodeTimer = setTimeout(() => {
-                performReverseGeocode(lat, lng);
-            }, 500);
+            // DISABLED: No live reverse geocode to prevent jitter
+            // Address will be fetched only on confirm
         }
 
         function performReverseGeocode(lat, lng) {
-            if (window.APP.picker.geocodeRequest) {
-                window.APP.picker.geocodeRequest = null;
-            }
-
+            // DISABLED LIVE MODE: Only show static placeholder
             const addressDisplay = document.getElementById('picker-address');
-            addressDisplay.innerText = 'Mencari alamat...';
-
-            const geocoder = new google.maps.Geocoder();
-            const requestId = Date.now();
-            window.APP.picker.geocodeRequest = requestId;
-
-            geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-                if (window.APP.picker.geocodeRequest !== requestId) {
-                    return;
-                }
-
-                if (status === "OK" && results[0]) {
-                    const address = cleanAddress(results[0].formatted_address);
-                    addressDisplay.innerText = address;
-                    document.getElementById('confirm-btn').disabled = false;
-                } else {
-                    addressDisplay.innerText = 'Gagal mendapatkan alamat. Coba geser peta lagi.';
-                    document.getElementById('confirm-btn').disabled = true;
-                }
-            });
+            const pickerType = window.APP.picker.type;
+            
+            if (pickerType === 'origin') {
+                addressDisplay.innerText = '📍 Asal: Mencari alamat...';
+            } else {
+                addressDisplay.innerText = '🏁 Tujuan: Mencari alamat...';
+            }
+            
+            // Always enable button (coordinates are saved)
+            document.getElementById('confirm-btn').disabled = false;
         }
 
         window.confirmLocation = function () {
@@ -1545,28 +1532,50 @@
             if (!type || !window.APP.picker.currentLocation) return;
 
             const { lat, lng } = window.APP.picker.currentLocation;
-            const address = document.getElementById('picker-address').innerText;
-
             const inputId = type === 'origin' ? 'origin' : 'destination';
-            document.getElementById(inputId).value = address;
-            toggleClearBtn(inputId);
+            
+            // Show loading state
+            const confirmBtn = document.getElementById('confirm-btn');
+            confirmBtn.disabled = true;
+            confirmBtn.innerText = '⏳ Memproses...';
 
-            const placeType = type === 'origin' ? 'origin' : 'dest';
-            window.APP.places[placeType] = {
-                geometry: {
-                    location: new google.maps.LatLng(lat, lng)
-                },
-                formatted_address: address
-            };
+            // STEP 3: Reverse geocode ONLY ONCE on confirm
+            const geocoder = new google.maps.Geocoder();
+            geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+                let address;
+                
+                if (status === "OK" && results[0]) {
+                    address = cleanAddress(results[0].formatted_address);
+                } else {
+                    // Fallback to coordinates if geocode fails
+                    address = `Lokasi: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                }
 
-            updateMarker(placeType, lat, lng);
-            expandMap();
+                // Update input with final address
+                document.getElementById(inputId).value = address;
+                toggleClearBtn(inputId);
 
-            if (window.APP.places.origin && window.APP.places.dest) {
-                calculateRoute();
-            }
+                const placeType = type === 'origin' ? 'origin' : 'dest';
+                window.APP.places[placeType] = {
+                    geometry: {
+                        location: new google.maps.LatLng(lat, lng)
+                    },
+                    formatted_address: address
+                };
 
-            closeMapPicker();
+                updateMarker(placeType, lat, lng);
+                expandMap();
+
+                if (window.APP.places.origin && window.APP.places.dest) {
+                    calculateRoute();
+                }
+
+                // Reset button
+                confirmBtn.disabled = false;
+                confirmBtn.innerText = '✓ Konfirmasi Lokasi';
+                
+                closeMapPicker();
+            });
         }
 
         window.addEventListener('popstate', function (event) {
