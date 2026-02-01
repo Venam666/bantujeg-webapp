@@ -18,17 +18,26 @@
             --dark: #0F172A; 
             --gray: #F8FAFC; 
             --border: #E2E8F0;
-            --ai-color: #8B5CF6; 
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body { font-family: 'Plus Jakarta Sans', sans-serif; background: #ffffff; color: var(--dark); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
 
-        /* --- MAP CONTAINER (TOP HALF) --- */
+        /* --- HEADER (FIXED TOP) --- */
+        header { 
+            padding: 16px 20px; background: white; z-index: 50; border-bottom: 1px solid #f1f1f1;
+            display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+        }
+        .brand-name { font-size: 1.25rem; font-weight: 800; color: var(--primary); line-height: 1.1; }
+        .greeting { font-size: 0.8rem; color: #64748B; font-weight: 600; }
+        .pulse { width: 10px; height: 10px; background: #10B981; border-radius: 50%; animation: pulse 1.5s infinite; box-shadow: 0 0 0 rgba(16, 185, 129, 0.4); }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+
+        /* --- MAP CONTAINER (MIDDLE) --- */
         #map-wrapper {
             position: relative;
             width: 100%;
-            height: 50vh; /* Map-First Experience */
+            height: 50vh; /* Dominates view */
             background: #eee;
             flex-shrink: 0;
         }
@@ -47,7 +56,6 @@
             transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
         
-        /* Pin visual */
         .pin-head {
             width: 40px; height: 40px;
             background: var(--dark);
@@ -56,7 +64,7 @@
             transform: rotate(-45deg);
             box-shadow: 0 4px 10px rgba(0,0,0,0.3);
             display: flex; align-items: center; justify-content: center;
-            margin-bottom: 10px; /* Space for shadow */
+            margin-bottom: 10px;
         }
         .pin-head::after {
             content: ''; width: 12px; height: 12px; background: var(--primary); border-radius: 50%; transform: rotate(45deg);
@@ -64,9 +72,9 @@
         .pin-shadow {
             width: 12px; height: 6px; background: rgba(0,0,0,0.2); border-radius: 50%;
             margin-top: -14px; filter: blur(2px);
+            transition: all 0.2s;
         }
         
-        /* Pin Label (Jemput/Tujuan) */
         .pin-label {
             background: white; padding: 6px 14px; border-radius: 20px;
             font-size: 0.75rem; font-weight: 800; color: var(--dark);
@@ -75,49 +83,21 @@
         }
 
         /* Bounce animation when map moves */
-        .map-moving .center-pin { transform: translate(-50%, -120%) scale(1.1); opacity: 0.9; }
-        .map-moving .pin-shadow { transform: scale(0.8); opacity: 0.5; }
+        .map-moving .center-pin { transform: translate(-50%, -130%) scale(1.1); opacity: 0.9; }
+        .map-moving .pin-shadow { transform: scale(0.6); opacity: 0.5; }
 
-        /* FLOATING GPS BUTTON - FIXED Z-INDEX & POSITION */
-        .floating-gps {
-            position: absolute; bottom: 180px; right: 20px; /* Elevated to avoid card overlap */
-            background: white; padding: 12px; border-radius: 50%;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15); cursor: pointer;
-            z-index: 999; font-size: 1.4rem; display: flex; align-items: center; justify-content: center;
-            transition: transform 0.2s;
-            animation: gpsPulse 3s infinite;
-        }
-        .floating-gps:active { transform: scale(0.9); }
-        
-        @keyframes gpsPulse {
-            0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7); }
-            70% { box-shadow: 0 0 0 15px rgba(255, 255, 255, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
-        }
-
-        /* --- INPUT CARD (BOTTOM HALF) --- */
+        /* --- INPUT CARD (BOTTOM HALF - OVERLAPPING) --- */
         .card-interface {
             flex: 1;
             background: white;
             padding: 24px 20px;
             border-radius: 24px 24px 0 0;
-            margin-top: -24px; /* Overlap map slightly */
+            margin-top: -20px; /* Overlap map slightly */
             position: relative;
             z-index: 20;
             box-shadow: 0 -4px 20px rgba(0,0,0,0.05);
             overflow-y: auto;
-            animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
         }
-
-        @keyframes slideUp {
-            from { transform: translateY(100%); }
-            to { transform: translateY(0); }
-        }
-
-        /* HEADER INSIDE CARD */
-        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        .brand-name { font-size: 1.25rem; font-weight: 800; color: var(--primary); }
-        .greeting { font-size: 0.8rem; color: #64748B; font-weight: 600; }
 
         /* TABS */
         .tabs { display: flex; gap: 8px; margin-bottom: 20px; background: var(--gray); padding: 4px; border-radius: 16px; border: 1px solid var(--border); overflow-x: auto; }
@@ -128,7 +108,6 @@
         .input-group { margin-bottom: 12px; }
         .input-wrapper { position: relative; width: 100%; transition: all 0.3s; border-radius: 16px; border: 1px solid transparent; background: var(--gray); }
         
-        /* Active Input Highlight */
         .input-wrapper.active-field { 
             border-color: var(--primary);
             background: #F0FDF4;
@@ -142,10 +121,14 @@
             background: transparent; border: none;
             border-radius: 16px; font-family: inherit; font-size: 0.9rem; color: var(--dark);
             transition: all 0.2s;
-            padding-right: 40px; 
+            padding-right: 40px; /* Default padding */
         }
         input:focus { outline: none; }
         
+        /* DYNAMIC PADDING WHEN GPS BUTTON IS PRESENT */
+        .input-wrapper.has-gps input { padding-right: 120px; }
+
+        /* CLEAR BUTTON */
         .clear-btn {
             position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
             width: 20px; height: 20px; border-radius: 50%; background: #E2E8F0;
@@ -153,6 +136,18 @@
             font-size: 12px; font-weight: bold; cursor: pointer; z-index: 6;
             display: none; 
         }
+        /* Shift Clear Button when GPS is present */
+        .input-wrapper.has-gps .clear-btn { right: 90px; }
+
+        /* GPS BUTTON (INLINE) */
+        .gps-inline-btn {
+            position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+            background: white; border: 1px solid var(--border); color: var(--primary);
+            padding: 6px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: 700;
+            cursor: pointer; z-index: 7; display: flex; align-items: center; gap: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05); transition: all 0.2s;
+        }
+        .gps-inline-btn:active { transform: translateY(-50%) scale(0.95); }
 
         /* AI BUTTONS */
         .ai-btn {
@@ -213,34 +208,19 @@
         .btn-cta:active { transform: scale(0.98); }
         .btn-cta.disabled { background: #cbd5e1; box-shadow: none; pointer-events: none; }
         
-        /* Ripple Effect */
-        .btn-cta::after {
-            content: "";
-            background: rgba(255, 255, 255, 0.3);
-            display: block;
-            position: absolute;
-            border-radius: 50%;
-            padding-top: 240%;
-            padding-left: 240%;
-            margin-top: -120%;
-            margin-left: -120%;
-            opacity: 0;
-            transition: all 0.8s;
-        }
-        .btn-cta:active::after {
-            padding-top: 0;
-            padding-left: 0;
-            margin-top: 0;
-            margin-left: 0;
-            opacity: 1;
-            transition: 0s;
-        }
-
         .spinner { border: 3px solid rgba(255,255,255,0.3); border-radius: 50%; border-top: 3px solid white; width: 20px; height: 20px; animation: spin 1s linear infinite; display: none; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
+
+    <header>
+        <div class="brand-container">
+            <div class="brand-name">BantuJeg.</div>
+            <div class="greeting">Siap Antar Kamu! 👋</div>
+        </div>
+        <div class="pulse" id="status-dot"></div> 
+    </header>
 
     <!-- MAP SECTION -->
     <div id="map-wrapper">
@@ -252,22 +232,11 @@
             <div class="pin-head"></div>
             <div class="pin-shadow"></div>
         </div>
-
-        <!-- FLOATING GPS -->
-        <div class="floating-gps" onclick="getCurrentLocation()">
-            📍
-        </div>
     </div>
 
     <!-- INPUT CARD SECTION -->
     <div class="card-interface">
-        <div class="card-header">
-            <div>
-                <div class="brand-name">BantuJeg.</div>
-                <div class="greeting">Siap Antar Kamu! 👋</div>
-            </div>
-        </div>
-
+        
         <!-- HISTORY CHIP -->
         <div id="history-chip" onclick="useHistory()">
             <span id="history-text">🕒 Rute Terakhir...</span>
@@ -295,6 +264,13 @@
                 <span class="input-icon">🏁</span>
                 <input type="text" id="destination" placeholder="Antar ke mana?" oninput="handleInput('destination')" onfocus="activateField('destination')">
                 <div class="clear-btn" id="clear-destination" onclick="clearInput('destination')">✕</div>
+            </div>
+        </div>
+
+        <!-- DYNAMIC GPS BUTTON (Moved via JS) -->
+        <div id="gps-btn-container" style="display:none;">
+            <div class="gps-inline-btn" id="btn-gps" onclick="getCurrentLocation()">
+                <span>📍</span> Lokasi Saya
             </div>
         </div>
 
@@ -392,7 +368,6 @@
         // CONFIG
         const CONFIG_WA = "62895330091464";
         const SALATIGA_CENTER = { lat: -7.3305, lng: 110.5084 };
-        const MAPS_API_KEY = "AIzaSyAXo3ErccnWYzKPXZsli1j9zsE5_50hO1g"; // MAPS Key
         const GEMINI_API_KEY = "AIzaSyDDcAVxAk_jY05_VRlJ8KjNPusFyEw714s"; // GEMINI Key
         
         // APP STATE
@@ -426,7 +401,7 @@
         let model;
         try {
             const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-            model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+            model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" }); // UPDATED TO 2.0
         } catch(e) {
             console.error("Gemini Init Error:", e);
         }
@@ -510,12 +485,25 @@
         window.initMap = function() {
             window.APP.geocoder = new google.maps.Geocoder();
             
+            // STRICT BOUNDS (CENTRAL JAVA / SALATIGA)
+            const JATENG_BOUNDS = {
+                north: -6.5,
+                south: -8.0,
+                west: 110.0,
+                east: 111.0,
+            };
+
             const mapOptions = {
                 center: SALATIGA_CENTER,
                 zoom: 16,
-                disableDefaultUI: true, // Clean UI
+                minZoom: 12, // Prevent zooming out to world
+                restriction: {
+                    latLngBounds: JATENG_BOUNDS,
+                    strictBounds: true,
+                },
+                disableDefaultUI: true,
                 zoomControl: false,
-                clickableIcons: false, // Hide POI clicks
+                clickableIcons: false,
                 styles: [
                     { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] }
                 ]
@@ -553,6 +541,9 @@
 
             initAutocomplete();
             checkHistory();
+            
+            // INIT DEFAULT GPS BUTTON POSITION
+            setService('RIDE', document.querySelector('.tab'));
         };
 
         // --- REVERSE GEOCODING ---
@@ -658,6 +649,10 @@
         window.getCurrentLocation = function() {
             if (!navigator.geolocation) { alert("Browser tidak support GPS"); return; }
             
+            const btn = document.getElementById('btn-gps');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = "<span>⏳</span>";
+
             navigator.geolocation.getCurrentPosition(pos => {
                 const lat = pos.coords.latitude;
                 const lng = pos.coords.longitude;
@@ -666,8 +661,10 @@
                 window.APP.ignoreIdle = false; // Allow reverse geocode to fill address
                 window.APP.map.panTo(latlng);
                 window.APP.map.setZoom(17);
+                btn.innerHTML = originalText;
             }, () => {
                 alert("Gagal ambil lokasi GPS.");
+                btn.innerHTML = originalText;
             });
         };
 
@@ -847,7 +844,14 @@
             const legalWarning = document.getElementById('legal-warning');
             const originInput = document.getElementById('origin');
             const destInput = document.getElementById('destination');
+            const gpsBtn = document.getElementById('btn-gps');
+            const wrapOrg = document.getElementById('wrapper-origin');
+            const wrapDst = document.getElementById('wrapper-destination');
             
+            // Reset wrappers styling
+            wrapOrg.classList.remove('has-gps');
+            wrapDst.classList.remove('has-gps');
+
             // Hide Specifics
             jastipField.style.display = 'none';
             legalWarning.style.display = 'none';
@@ -855,22 +859,37 @@
             if (type === 'FOOD_MART') {
                 jastipField.style.display = 'block';
                 activateField('destination');
+                
+                // MOVE GPS TO DESTINATION
+                wrapDst.appendChild(gpsBtn);
+                wrapDst.classList.add('has-gps');
+
                 originInput.placeholder = "Beli di mana? (Nama Warung/Toko)";
                 destInput.placeholder = "Antar ke mana? (Lokasi Kamu)";
             } else if (type === 'SEND') {
                 legalWarning.style.display = 'block';
                 activateField('origin');
+                
+                // MOVE GPS TO ORIGIN
+                wrapOrg.appendChild(gpsBtn);
+                wrapOrg.classList.add('has-gps');
+
                 originInput.placeholder = "Ambil paket di mana?";
                 destInput.placeholder = "Kirim ke mana?";
             } else { // RIDE
                 activateField('origin');
+                
+                // MOVE GPS TO ORIGIN
+                wrapOrg.appendChild(gpsBtn);
+                wrapOrg.classList.add('has-gps');
+
                 originInput.placeholder = "Jemput di mana? (Cari Masjid/Sekolah)";
                 destInput.placeholder = "Antar ke mana?";
             }
             
             // Force Button Reset
             updateLink();
-        };
+        }
 
         function setLoading(state) {
             const spin = document.getElementById('loading-spin');
