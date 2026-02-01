@@ -33,28 +33,22 @@
         }
 
         html {
-            /* Prevent iOS bounce/rubber-banding */
+            /* Prevent iOS bounce */
             overscroll-behavior: none;
             -webkit-overflow-scrolling: touch;
-            /* Lock height on mobile to prevent resize on keyboard */
             height: 100%;
-            position: fixed;
-            overflow: hidden;
-            width: 100%;
         }
 
         body {
             font-family: 'Plus Jakarta Sans', sans-serif;
             background: #ffffff;
             color: var(--dark);
-            padding-bottom: 100px;
-            /* Mobile optimizations */
-            height: 100%;
-            overflow-y: auto;
+            min-height: 100vh;
+            /* FIXED: Allow normal scrolling */
             overflow-x: hidden;
+            overflow-y: auto;
             -webkit-overflow-scrolling: touch;
             overscroll-behavior-y: contain;
-            position: relative;
         }
 
         header {
@@ -108,9 +102,13 @@
         #map-wrapper {
             padding: 20px 20px 0 20px;
             background: white;
+            /* CRITICAL: Isolate from layout reflow */
+            position: relative;
+            z-index: 1;
         }
 
         #map-container {
+            /* LOCK HEIGHT: No dynamic resize, pure static canvas */
             height: 280px;
             width: 100%;
             position: relative;
@@ -119,12 +117,13 @@
             overflow: hidden;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
             transition: height 0.3s ease;
-            /* Hardware acceleration for smooth rendering */
+            /* GPU isolation - map is separate render layer */
             transform: translateZ(0);
             backface-visibility: hidden;
             will-change: height;
-            /* CRITICAL for mobile: prevent layout shift on keyboard */
-            contain: layout style paint;
+            /* CRITICAL: Complete isolation from page layout */
+            contain: strict;
+            isolation: isolate;
         }
 
         #map-container.expanded {
@@ -132,12 +131,13 @@
         }
 
         #map {
+            /* Fill container exactly - no percent chain */
             width: 100%;
             height: 100%;
-            /* Hardware acceleration */
+            /* GPU layer lock */
             transform: translate3d(0, 0, 0);
             backface-visibility: hidden;
-            /* CRITICAL: Isolate map rendering layer */
+            /* Complete isolation */
             isolation: isolate;
             contain: strict;
         }
@@ -146,6 +146,9 @@
             background: white;
             padding: 24px;
             min-height: 50vh;
+            /* UI floats as separate layer */
+            position: relative;
+            z-index: 2;
         }
 
         .tabs {
@@ -843,33 +846,13 @@
             });
             window.APP.directionsRenderer.setMap(window.APP.map);
 
-            // MOBILE FIX: Prevent map resize on viewport changes (keyboard open/close)
-            let resizeTimer;
-            const debouncedResize = () => {
-                if (resizeTimer) clearTimeout(resizeTimer);
-                resizeTimer = setTimeout(() => {
-                    google.maps.event.trigger(window.APP.map, 'resize');
-                }, 300);
-            };
-
-            // Only resize on actual window resize, not on keyboard
-            let lastWidth = window.innerWidth;
-            window.addEventListener('resize', () => {
-                const currentWidth = window.innerWidth;
-                // Only resize map if width changed (not keyboard open/close)
-                if (Math.abs(currentWidth - lastWidth) > 10) {
-                    debouncedResize();
-                    lastWidth = currentWidth;
-                }
-            });
-
             // Prevent map pan/zoom jitter on touch
             window.APP.map.addListener('dragstart', () => {
                 if (window.APP.boundsTimer) clearTimeout(window.APP.boundsTimer);
                 if (window.APP.routeTimer) clearTimeout(window.APP.routeTimer);
             });
 
-            // CRITICAL: Stabilize main map on mobile
+            // CRITICAL: Stabilize main map on mobile (one-time only)
             const mapContainer = document.getElementById("map");
             stabilizeGoogleMapMobile(window.APP.map, mapContainer);
 
@@ -1615,29 +1598,7 @@
 
         // CRITICAL MOBILE FIX: Prevent map jitter on keyboard open/close
         function initMobileOptimizations() {
-            let originalViewportHeight = window.innerHeight;
-            let isKeyboardOpen = false;
-
-            // Detect keyboard open/close
-            window.addEventListener('resize', () => {
-                const currentHeight = window.innerHeight;
-                const heightDiff = Math.abs(originalViewportHeight - currentHeight);
-                
-                // Keyboard opened/closed (>150px height change)
-                if (heightDiff > 150) {
-                    isKeyboardOpen = currentHeight < originalViewportHeight;
-                    
-                    if (isKeyboardOpen) {
-                        window.APP.skipMapUpdate = true;
-                    } else {
-                        setTimeout(() => {
-                            window.APP.skipMapUpdate = false;
-                        }, 300);
-                    }
-                }
-            });
-
-            // Prevent map updates when typing
+            // Prevent map updates when typing (keyboard doesn't affect map now)
             const inputs = ['origin', 'destination'];
             inputs.forEach(inputId => {
                 const input = document.getElementById(inputId);
@@ -1654,13 +1615,13 @@
                 }
             });
 
-            // Prevent touch-related jitter
+            // Prevent overscroll on body (allow map gestures)
             document.body.addEventListener('touchmove', (e) => {
                 if (e.target.closest('#map') || e.target.closest('#picker-map')) {
                     // Allow map scrolling
                 } else {
-                    // Prevent overscroll on body
-                    if (e.cancelable) {
+                    // Prevent overscroll bounce
+                    if (e.cancelable && window.scrollY === 0) {
                         e.preventDefault();
                     }
                 }
