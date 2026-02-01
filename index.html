@@ -984,7 +984,7 @@
         }
 
         function initAutocomplete() {
-            // STRICT 50KM RADIUS AROUND SALATIGA
+            // 50KM RADIUS AROUND SALATIGA - BIAS NOT BLOCK
             const bounds = new google.maps.LatLngBounds(
                 new google.maps.LatLng(-7.78, 110.05), // Southwest
                 new google.maps.LatLng(-6.88, 110.95)  // Northeast
@@ -994,7 +994,7 @@
                 bounds: bounds,
                 componentRestrictions: { country: "id" },
                 fields: ["geometry", "name", "formatted_address"],
-                strictBounds: true,
+                strictBounds: false, // BIAS results, don't block - prevents autocomplete lag
                 types: ['establishment', 'geocode']
             };
 
@@ -1071,7 +1071,7 @@
                         calculatePrice(finalKm);
                     }
                 } else {
-                    console.error("Directions Failed:", status);
+                    // Directions failed silently - avoid console spam
                 }
             });
         }
@@ -1094,7 +1094,7 @@
             const service = window.APP.service;
             const config = window.APP.config[service];
 
-            if (!config) { console.warn("Config loading..."); return; }
+            if (!config) return;
 
             let price = 0;
             const tiers = config.pricing_model?.tiers || config.TIERS;
@@ -1414,23 +1414,26 @@
             });
         }
 
+        // STATELESS confirm button - always clickable, no state lock
         window.confirmLocation = function () {
             const type = window.APP.picker.type;
             if (!type || !window.APP.picker.currentLocation) return;
 
             const { lat, lng } = window.APP.picker.currentLocation;
 
-            // Disable button and show loading
+            // Temporarily disable during API call only
             const confirmBtn = document.getElementById('confirm-btn');
             const addressDisplay = document.getElementById('picker-address');
             confirmBtn.disabled = true;
             addressDisplay.innerText = 'Mencari alamat...';
 
-            // Geocode ONLY on confirm button press
+            // Geocode on button press - re-enable button after
             performReverseGeocode(lat, lng, (address) => {
+                // ALWAYS re-enable button for reusability
+                confirmBtn.disabled = false;
+
                 if (!address) {
                     addressDisplay.innerText = 'Gagal mendapatkan alamat. Coba lagi.';
-                    confirmBtn.disabled = false;
                     return;
                 }
 
@@ -1464,6 +1467,11 @@
                 event.preventDefault();
             }
         });
+
+        // 🔒 API SECURITY CHECK:
+        // ✅ Maps API key should be domain-restricted in Google Cloud Console
+        // ✅ Only enable: Maps JS, Places, Geocoding, Directions
+        // ✅ No AI keys or secrets in frontend
 
         window.onload = () => {
             if (typeof google !== 'undefined') {
