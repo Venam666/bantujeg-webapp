@@ -84,7 +84,6 @@
             }
         }
 
-        /* MAP UI */
         #map-wrapper {
             padding: 20px 20px 0 20px;
             background: white;
@@ -110,14 +109,12 @@
             height: 100%;
         }
 
-        /* CARD UI */
         .card-interface {
             background: white;
             padding: 24px;
             min-height: 50vh;
         }
 
-        /* TABS */
         .tabs {
             display: flex;
             gap: 8px;
@@ -149,7 +146,6 @@
             transform: scale(1.02);
         }
 
-        /* INPUTS & WRAPPERS */
         .input-group {
             margin-bottom: 16px;
         }
@@ -189,7 +185,6 @@
             outline: none;
         }
 
-        /* CLEAR BUTTON (X) */
         .clear-btn {
             position: absolute;
             right: 16px;
@@ -215,7 +210,6 @@
             color: var(--dark);
         }
 
-        /* NEW: INPUT ACTIONS CONTAINER (BELOW INPUT) */
         .input-actions {
             display: flex;
             gap: 8px;
@@ -256,7 +250,6 @@
             border-color: #FDE68A;
         }
 
-        /* HISTORY CHIP */
         #history-chip {
             background: #ECFDF5;
             border: 1px solid #A7F3D0;
@@ -281,7 +274,6 @@
             max-width: 280px;
         }
 
-        /* QUICK NOTES CHIPS */
         .note-chips {
             display: flex;
             gap: 8px;
@@ -308,7 +300,6 @@
             transform: scale(0.95);
         }
 
-        /* LEGAL WARNING */
         #legal-warning {
             background: var(--warning-bg);
             border: 1px solid #FDE047;
@@ -322,7 +313,6 @@
             line-height: 1.4;
         }
 
-        /* CARDS */
         .price-card {
             background: linear-gradient(135deg, #0F172A 0%, #334155 100%);
             color: white;
@@ -447,7 +437,6 @@
             }
         }
 
-        /* ===== MAP PICKER MODAL STYLES ===== */
         #map-picker-modal {
             position: fixed;
             inset: 0;
@@ -506,7 +495,6 @@
             height: 100%;
         }
 
-        /* CENTER PIN (FIXED) */
         .center-pin {
             position: absolute;
             top: 50%;
@@ -533,7 +521,6 @@
             filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.2));
         }
 
-        /* FOOTER PANEL */
         .picker-footer {
             background: white;
             padding: 16px 20px 24px;
@@ -694,7 +681,6 @@
         </a>
     </div>
 
-    <!-- ===== MAP PICKER MODAL ===== -->
     <div id="map-picker-modal">
         <div class="picker-header">
             <button class="close-modal-btn" onclick="closeMapPicker()">✕</button>
@@ -724,9 +710,9 @@
             calc: { distance: 0, price: 0 },
             map: null,
             pickerMap: null,
+            directionsRenderer: null,
             markers: { origin: null, dest: null },
             historyData: null,
-            bounds: null,
             picker: {
                 type: null,
                 currentLocation: null,
@@ -798,6 +784,18 @@
                 streetViewControl: false,
                 fullscreenControl: false
             });
+
+            // Initialize DirectionsRenderer for visual route
+            window.APP.directionsRenderer = new google.maps.DirectionsRenderer({
+                suppressMarkers: true,
+                preserveViewport: false,
+                polylineOptions: {
+                    strokeColor: "#4285F4",
+                    strokeWeight: 5,
+                    strokeOpacity: 0.8
+                }
+            });
+            window.APP.directionsRenderer.setMap(window.APP.map);
 
             checkHistory();
         }
@@ -984,16 +982,18 @@
         }
 
         function initAutocomplete() {
+            // STRICT 50KM RADIUS AROUND SALATIGA
             const bounds = new google.maps.LatLngBounds(
-                new google.maps.LatLng(-7.80, 110.00),
-                new google.maps.LatLng(-6.80, 111.00)
+                new google.maps.LatLng(-7.78, 110.05), // Southwest
+                new google.maps.LatLng(-6.88, 110.95)  // Northeast
             );
 
             const options = {
                 bounds: bounds,
                 componentRestrictions: { country: "id" },
                 fields: ["geometry", "name", "formatted_address"],
-                strictBounds: false
+                strictBounds: true,
+                types: ['establishment', 'geocode']
             };
 
             const acOrigin = new google.maps.places.Autocomplete(document.getElementById('origin'), options);
@@ -1043,6 +1043,9 @@
             }, (res, status) => {
                 setLoading(false);
                 if (status === 'OK') {
+                    // DISPLAY VISUAL ROUTE (BLUE LINE)
+                    window.APP.directionsRenderer.setDirections(res);
+
                     const googleKm = res.routes[0].legs[0].distance.value / 1000;
 
                     const straightKm = google.maps.geometry.spherical.computeDistanceBetween(
@@ -1204,6 +1207,11 @@
             window.APP.markers = { origin: null, dest: null };
             window.APP.calc = { distance: 0, price: 0 };
 
+            // CLEAR ROUTE LINE
+            if (window.APP.directionsRenderer) {
+                window.APP.directionsRenderer.setDirections({ routes: [] });
+            }
+
             document.getElementById('price-card').style.display = 'none';
             document.getElementById('error-card').style.display = 'none';
             toggleClearBtn('origin');
@@ -1259,8 +1267,6 @@
             }
         }
 
-        // ===== MAP PICKER MODAL FUNCTIONS =====
-
         window.openMapPicker = function (type) {
             window.APP.picker.type = type;
 
@@ -1302,20 +1308,22 @@
                 window.APP.pickerMap.addListener('idle', handlePickerMapIdle);
             }
 
-            // Fix jitter: trigger resize & delay setCenter
+            // FIX JITTER: Wait for modal animation to complete (300ms)
             setTimeout(() => {
+                // Force map resize
                 google.maps.event.trigger(window.APP.pickerMap, "resize");
 
-                let initialLat, initialLng;
+                let targetCenter;
                 const existingPlace = window.APP.places[type === 'origin' ? 'origin' : 'dest'];
 
                 if (existingPlace && existingPlace.geometry) {
-                    initialLat = existingPlace.geometry.location.lat();
-                    initialLng = existingPlace.geometry.location.lng();
-                    window.APP.pickerMap.setCenter({ lat: initialLat, lng: initialLng });
+                    const lat = existingPlace.geometry.location.lat();
+                    const lng = existingPlace.geometry.location.lng();
+                    targetCenter = { lat, lng };
+                    window.APP.picker.currentLocation = { lat, lng };
+                    window.APP.pickerMap.setCenter(targetCenter);
                     window.APP.pickerMap.setZoom(18);
-                    window.APP.picker.currentLocation = { lat: initialLat, lng: initialLng };
-                    performReverseGeocode(initialLat, initialLng);
+                    performReverseGeocode(lat, lng);
                 } else if (navigator.geolocation) {
                     navigator.geolocation.getCurrentPosition(
                         (position) => {
@@ -1341,7 +1349,7 @@
                     window.APP.picker.currentLocation = centerSalatiga;
                     performReverseGeocode(centerSalatiga.lat, centerSalatiga.lng);
                 }
-            }, 200);
+            }, 300);
 
             history.pushState({ mapPicker: true }, '', '');
         }
