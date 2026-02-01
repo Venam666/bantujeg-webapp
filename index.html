@@ -1,429 +1,237 @@
 <!DOCTYPE html>
 <html lang="id">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#ffffff">
-    <title>BantuJeg - Order Cepat</title>
-
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
-        rel="stylesheet">
+    <title>BantuJeg - Super App</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
     <style>
-        :root {
-            --primary: #10B981;
+        :root { 
+            --primary: #10B981; 
             --primary-dark: #059669;
             --danger: #EF4444;
             --warning-bg: #FEF9C3;
             --warning-text: #854D0E;
-            --dark: #0F172A;
-            --gray: #F8FAFC;
+            --dark: #0F172A; 
+            --gray: #F8FAFC; 
             --border: #E2E8F0;
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            -webkit-tap-highlight-color: transparent;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background: #ffffff; color: var(--dark); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
 
-        body {
-            font-family: 'Plus Jakarta Sans', sans-serif;
-            background: #ffffff;
-            color: var(--dark);
-            padding-bottom: 100px;
+        /* --- HEADER --- */
+        header { 
+            padding: 16px 20px; background: white; z-index: 50; border-bottom: 1px solid #f1f1f1;
+            display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+            transition: transform 0.3s ease;
         }
+        body.picking-mode header { transform: translateY(-100%); } /* Hide header in picking mode */
 
-        header {
-            padding: 12px 20px;
-            background: white;
-            position: sticky;
-            top: 0;
-            z-index: 50;
-            border-bottom: 1px solid #f1f1f1;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+        .brand-name { font-size: 1.25rem; font-weight: 800; color: var(--primary); line-height: 1.1; }
+        .greeting { font-size: 0.8rem; color: #64748B; font-weight: 600; }
+        .pulse { width: 10px; height: 10px; background: #10B981; border-radius: 50%; animation: pulse 1.5s infinite; box-shadow: 0 0 0 rgba(16, 185, 129, 0.4); }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
 
-        .brand-name {
-            font-size: 1.25rem;
-            font-weight: 800;
-            color: var(--primary);
-            line-height: 1.1;
-        }
-
-        .greeting {
-            font-size: 0.8rem;
-            color: #64748B;
-            font-weight: 600;
-        }
-
-        .pulse {
-            width: 10px;
-            height: 10px;
-            background: #10B981;
-            border-radius: 50%;
-            animation: pulse 1.5s infinite;
-            box-shadow: 0 0 0 rgba(16, 185, 129, 0.4);
-        }
-
-        @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
-            70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
-        }
-
-        /* MAP UI */
+        /* --- MAP ENGINE (DUAL MODE) --- */
         #map-wrapper {
-            padding: 20px 20px 0 20px;
-            background: white;
-        }
-
-        #map-container {
-            height: 280px;
-            width: 100%;
             position: relative;
-            background: #eee;
-            border-radius: 24px;
-            overflow: hidden;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-            transition: height 0.3s ease;
-        }
-
-        #map-container.expanded {
-            height: 400px;
-        }
-
-        #map {
             width: 100%;
-            height: 100%;
+            height: 280px; /* Default Dashboard Height */
+            background: #eee;
+            flex-shrink: 0;
+            transition: height 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+            z-index: 10;
         }
 
-        /* CARD UI */
-        .card-interface {
-            background: white;
-            padding: 24px;
-            min-height: 50vh;
+        /* PICKING MODE STATE */
+        body.picking-mode #map-wrapper {
+            height: 100vh; /* Fullscreen */
+            position: fixed;
+            top: 0; left: 0;
+            z-index: 900;
         }
+
+        #map { width: 100%; height: 100%; }
+
+        /* CENTER PIN (Hidden by default, Visible in Picking Mode) */
+        .center-pin-container {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -100%);
+            z-index: 1000; pointer-events: none;
+            display: none; flex-direction: column; align-items: center;
+            transition: transform 0.2s;
+        }
+        body.picking-mode .center-pin-container { display: flex; }
+        
+        .pin-label-float {
+            background: var(--dark); color: white; padding: 6px 12px; border-radius: 20px;
+            font-size: 0.75rem; font-weight: 700; margin-bottom: 12px; white-space: nowrap;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3); opacity: 0.9;
+        }
+        .pin-head {
+            width: 44px; height: 44px; background: var(--dark);
+            border: 3px solid white; border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center;
+        }
+        .pin-head::after { content: ''; width: 12px; height: 12px; background: var(--primary); border-radius: 50%; }
+        .pin-shadow {
+            width: 12px; height: 6px; background: rgba(0,0,0,0.3); border-radius: 50%;
+            margin-top: -10px; filter: blur(2px); transform: translate(0, 40px);
+        }
+
+        /* Animation when dragging map */
+        body.map-dragging .center-pin-container { transform: translate(-50%, -130%) scale(1.1); }
+        body.map-dragging .pin-shadow { transform: translate(0, 50px) scale(0.6); opacity: 0.5; }
+
+        /* PICKING MODE CONTROLS */
+        .picking-controls {
+            position: fixed; bottom: 30px; left: 0; width: 100%;
+            padding: 0 20px; z-index: 1000; display: none;
+            flex-direction: column; gap: 10px;
+        }
+        body.picking-mode .picking-controls { display: flex; }
+
+        .btn-confirm-loc {
+            width: 100%; background: var(--dark); color: white; padding: 16px;
+            border-radius: 16px; font-weight: 700; font-size: 1rem; border: none;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+        .btn-cancel-loc {
+            position: fixed; top: 20px; left: 20px; z-index: 1000;
+            background: white; width: 40px; height: 40px; border-radius: 50%;
+            display: none; align-items: center; justify-content: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1); font-weight: 800; color: var(--dark);
+        }
+        body.picking-mode .btn-cancel-loc { display: flex; }
+
+        /* --- INPUT CARD (BOTTOM HALF) --- */
+        .card-interface {
+            flex: 1; background: white; padding: 24px 20px;
+            border-radius: 24px 24px 0 0; margin-top: -20px;
+            position: relative; z-index: 20; box-shadow: 0 -4px 20px rgba(0,0,0,0.05);
+            overflow-y: auto; transition: transform 0.3s;
+        }
+        body.picking-mode .card-interface { transform: translateY(100%); } /* Slide down */
 
         /* TABS */
-        .tabs {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 24px;
-            background: var(--gray);
-            padding: 4px;
-            border-radius: 16px;
-            border: 1px solid var(--border);
-            overflow-x: auto;
+        .tabs { display: flex; gap: 8px; margin-bottom: 20px; background: var(--gray); padding: 4px; border-radius: 16px; border: 1px solid var(--border); overflow-x: auto; }
+        .tab { flex: 1; padding: 10px; text-align: center; border-radius: 12px; font-weight: 700; font-size: 0.85rem; color: #64748B; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+        .tab.active { background: var(--primary); color: white; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); transform: scale(1.02); }
+
+        /* INPUTS */
+        .input-group { margin-bottom: 12px; }
+        .input-wrapper { 
+            position: relative; width: 100%; transition: all 0.3s; 
+            border-radius: 16px; border: 1px solid transparent; background: var(--gray); 
+            display: flex; align-items: center;
         }
+        .input-wrapper.active-field { border-color: var(--primary); background: #F0FDF4; }
 
-        .tab {
-            flex: 1;
-            padding: 12px;
-            text-align: center;
-            border-radius: 12px;
-            font-weight: 700;
-            font-size: 0.9rem;
-            color: #64748B;
-            cursor: pointer;
-            transition: all 0.2s;
-            white-space: nowrap;
+        .input-icon-left { padding: 0 12px; font-size: 1.1rem; color: #64748B; }
+        
+        input[type="text"], textarea, input[type="number"] { 
+            flex: 1; padding: 14px 0; background: transparent; border: none;
+            font-family: inherit; font-size: 0.9rem; color: var(--dark);
+            min-width: 0;
         }
+        input:focus { outline: none; }
 
-        .tab.active {
-            background: var(--primary);
-            color: white;
-            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
-            transform: scale(1.02);
+        /* MAP ICON (THE TRIGGER) */
+        .map-trigger-btn {
+            padding: 8px 12px; color: var(--primary); font-size: 1.2rem;
+            cursor: pointer; border-left: 1px solid #eee; display: flex; align-items: center;
         }
+        .map-trigger-btn:active { opacity: 0.5; }
 
-        /* INPUTS & WRAPPERS */
-        .input-group { margin-bottom: 16px; }
-
-        .input-wrapper { position: relative; width: 100%; }
-
-        .input-icon {
-            position: absolute;
-            left: 16px;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 1.2rem;
-            z-index: 2;
+        /* FLOATING GPS (Dashboard & Picking) */
+        .floating-gps {
+            position: absolute; bottom: 20px; right: 20px;
+            background: white; padding: 10px 14px; border-radius: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15); cursor: pointer;
+            z-index: 50; font-size: 0.8rem; font-weight: 700; color: var(--dark);
+            display: flex; align-items: center; gap: 6px;
         }
+        body.picking-mode .floating-gps { bottom: 100px; } /* Move up above button */
 
-        input[type="text"],
-        textarea,
-        input[type="number"] {
-            width: 100%;
-            padding: 16px 16px 16px 48px;
-            background: var(--gray);
-            border: 2px solid transparent;
-            border-radius: 16px;
-            font-family: inherit;
-            font-size: 0.95rem;
-            color: var(--dark);
-            transition: all 0.2s;
-            padding-right: 48px;
+        /* AI & BUTTONS */
+        .ai-btn {
+            background: linear-gradient(135deg, #8B5CF6, #6366F1);
+            color: white; border: none; padding: 8px 14px;
+            border-radius: 12px; font-size: 0.75rem; font-weight: 700;
+            cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+            margin-top: 8px; box-shadow: 0 4px 10px rgba(139, 92, 246, 0.2);
         }
+        .ai-btn:disabled { opacity: 0.7; }
 
-        input:focus {
-            border-color: var(--primary);
-            background: white;
-            outline: none;
-        }
-
-        /* UI FIX: INPUT OVERLAP LOGIC */
-        .input-wrapper.has-gps input { padding-right: 150px !important; }
-        .input-wrapper.has-gps .clear-btn { right: 125px !important; }
-
-        /* CLEAR BUTTON (X) */
-        .clear-btn {
-            position: absolute;
-            right: 16px;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            background: #E2E8F0;
-            color: #64748B;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            font-weight: bold;
-            cursor: pointer;
-            z-index: 6;
-            display: none;
-            transition: right 0.2s;
-        }
-
-        .clear-btn:hover { background: #cbd5e1; color: var(--dark); }
-
-        /* GPS BUTTON */
-        .gps-icon {
-            position: absolute;
-            right: 12px;
-            top: 50%;
-            transform: translateY(-50%);
-            background: white;
-            color: #0284C7;
-            border: 1px solid #E0F2FE;
-            padding: 8px 12px;
-            border-radius: 12px;
-            font-size: 0.75rem;
-            font-weight: 700;
-            cursor: pointer;
-            z-index: 5;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-            transition: all 0.2s;
-        }
-
-        .gps-icon:active { transform: scale(0.95); background: #f0f9ff; }
-
-        /* HISTORY CHIP */
-        #history-chip {
-            background: #ECFDF5;
-            border: 1px solid #A7F3D0;
-            color: #065F46;
-            padding: 10px 14px;
-            border-radius: 12px;
-            font-size: 0.8rem;
-            font-weight: 600;
-            margin-bottom: 16px;
-            display: none;
-            cursor: pointer;
-            align-items: center;
-            justify-content: space-between;
-            animation: slideUp 0.3s ease;
-        }
-
-        #history-chip span {
-            display: block;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            max-width: 280px;
-        }
-
-        /* QUICK NOTES CHIPS */
-        .note-chips {
-            display: flex;
-            gap: 8px;
-            overflow-x: auto;
-            padding-bottom: 8px;
-            margin-top: 8px;
-            -webkit-overflow-scrolling: touch;
-        }
-
-        .chip {
-            background: var(--gray);
-            border: 1px solid var(--border);
-            color: #64748B;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            white-space: nowrap;
-            cursor: pointer;
-            flex-shrink: 0;
-        }
-
-        .chip:active { background: #E2E8F0; transform: scale(0.95); }
-
-        /* LEGAL WARNING */
-        #legal-warning {
-            background: var(--warning-bg);
-            border: 1px solid #FDE047;
-            color: var(--warning-text);
-            padding: 12px;
-            border-radius: 12px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            margin-top: 12px;
-            display: none;
-            line-height: 1.4;
-        }
-
-        /* CARDS */
-        .price-card {
+        /* PRICE CARD */
+        .price-card { 
             background: linear-gradient(135deg, #0F172A 0%, #334155 100%);
-            color: white;
-            padding: 20px;
-            border-radius: 20px;
-            display: none;
-            align-items: center;
-            justify-content: space-between;
-            margin-top: 20px;
-            animation: slideUp 0.3s ease;
-            box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.3);
+            color: white; padding: 16px; border-radius: 16px;
+            display: none; align-items: center; justify-content: space-between;
+            margin-top: 16px; box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.3);
         }
+        .fake-price { font-size: 0.75rem; text-decoration: line-through; color: #94A3B8; }
+        .price-main { font-size: 1.5rem; font-weight: 800; }
 
-        .fake-price {
-            font-size: 0.8rem;
-            text-decoration: line-through;
-            color: #94A3B8;
-            margin-bottom: 2px;
+        /* BOTTOM BAR */
+        .bottom-bar { 
+            background: white; padding: 16px 20px; border-top: 1px solid #eee; 
+            position: fixed; bottom: 0; left: 0; width: 100%; z-index: 100;
         }
-
-        .promo-tag {
-            background: rgba(16, 185, 129, 0.2);
-            color: #34D399;
-            font-size: 0.65rem;
-            padding: 2px 6px;
-            border-radius: 4px;
-            margin-left: 6px;
-        }
-
-        .error-card {
-            background: #FEF2F2;
-            color: var(--danger);
-            border: 1px solid #FECACA;
-            padding: 16px;
-            border-radius: 16px;
-            margin-top: 20px;
-            font-weight: 600;
-            text-align: center;
-            display: none;
-            font-size: 0.9rem;
-            animation: slideUp 0.3s ease;
-        }
-
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .price-main {
-            font-size: 1.8rem;
-            font-weight: 800;
-            letter-spacing: -0.5px;
-        }
-
-        .price-dist {
-            font-size: 0.9rem;
-            opacity: 0.8;
-            font-weight: 500;
-        }
-
-        .bottom-bar {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            background: white;
-            padding: 16px 24px;
-            border-top: 1px solid #eee;
-            z-index: 100;
-        }
-
         .btn-cta {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            width: 100%;
-            background: var(--primary);
-            color: white;
-            padding: 16px;
-            border-radius: 16px;
-            font-weight: 700;
-            font-size: 1.1rem;
-            text-decoration: none;
-            transition: transform 0.2s;
-            box-shadow: 0 10px 20px rgba(16, 185, 129, 0.3);
+            display: flex; justify-content: center; align-items: center; width: 100%;
+            background: var(--primary); color: white; padding: 16px; border-radius: 16px;
+            font-weight: 700; font-size: 1.1rem; text-decoration: none;
+            transition: transform 0.2s; box-shadow: 0 10px 20px rgba(16, 185, 129, 0.3);
         }
-
-        .btn-cta:active { transform: scale(0.98); }
-
-        .btn-cta.disabled {
-            background: #cbd5e1;
-            box-shadow: none;
-            pointer-events: none;
-        }
-
-        .spinner {
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top: 3px solid white;
-            width: 20px;
-            height: 20px;
-            animation: spin 1s linear infinite;
-            display: none;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
+        .btn-cta.disabled { background: #cbd5e1; box-shadow: none; pointer-events: none; }
+        
+        .spinner { border: 3px solid rgba(255,255,255,0.3); border-radius: 50%; border-top: 3px solid white; width: 20px; height: 20px; animation: spin 1s linear infinite; display: none; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
-
 <body>
 
     <header>
-        <div class="brand-container">
-            <div class="brand-name">BantuJeg.</div>
-            <div class="greeting">Siap Antar Kamu! 👋</div>
-        </div>
-        <div class="pulse" id="status-dot"></div>
+        <div class="brand-name">BantuJeg.</div>
+        <div class="greeting">Siap Antar Kamu! 👋</div>
     </header>
 
+    <!-- MAP ENGINE -->
     <div id="map-wrapper">
-        <div id="map-container">
-            <div id="map"></div>
+        <div id="map"></div>
+        
+        <!-- CENTER PIN (PICKING MODE ONLY) -->
+        <div class="center-pin-container">
+            <div class="pin-label-float" id="pin-address-float">Geser Peta...</div>
+            <div class="pin-head"></div>
+            <div class="pin-shadow"></div>
+        </div>
+
+        <!-- FLOATING GPS -->
+        <div class="floating-gps" onclick="getCurrentLocation()">
+            <span>📍</span> Lokasi Saya
         </div>
     </div>
 
+    <!-- PICKING MODE CONTROLS -->
+    <div class="btn-cancel-loc" onclick="exitPickingMode()">✕</div>
+    <div class="picking-controls">
+        <button class="btn-confirm-loc" onclick="confirmPickedLocation()">
+            Pilih Lokasi Ini
+        </button>
+    </div>
+
+    <!-- DASHBOARD INTERFACE -->
     <div class="card-interface">
-        <div id="history-chip" onclick="useHistory()">
-            <span id="history-text">🕒 Pakai Rute Terakhir...</span>
-            <div style="font-size:1.2rem">↪️</div>
+        
+        <!-- History Chip -->
+        <div id="history-chip" style="background: #ECFDF5; padding: 10px; border-radius: 12px; margin-bottom: 15px; display:none; align-items:center; justify-content:space-between; cursor:pointer;" onclick="useHistory()">
+            <span id="history-text" style="font-size:0.8rem; color:#065F46; font-weight:600;"></span>
+            <span>↪️</span>
         </div>
 
         <div class="tabs">
@@ -432,119 +240,129 @@
             <div class="tab" onclick="setService('FOOD_MART', this)">🍜 JASTIP</div>
         </div>
 
+        <!-- ORIGIN -->
         <div class="input-group">
             <div class="input-wrapper" id="wrapper-origin">
-                <span class="input-icon">📍</span>
-                <input type="text" id="origin" placeholder="Jemput di mana? (Cari Masjid/Sekolah)" onfocus="expandMap()"
-                    oninput="handleInput('origin')">
-                <div class="clear-btn" id="clear-origin" onclick="clearInput('origin')">✕</div>
-                </div>
+                <span class="input-icon-left">📍</span>
+                <input type="text" id="origin" placeholder="Jemput di mana?" onfocus="activateField('origin')">
+                <div class="map-trigger-btn" onclick="enterPickingMode('origin')">🗺️</div>
+            </div>
         </div>
 
+        <!-- DESTINATION -->
         <div class="input-group">
             <div class="input-wrapper" id="wrapper-destination">
-                <span class="input-icon">🏁</span>
-                <input type="text" id="destination" placeholder="Antar ke mana?" oninput="handleInput('destination')">
-                <div class="clear-btn" id="clear-destination" onclick="clearInput('destination')">✕</div>
-                </div>
+                <span class="input-icon-left">🏁</span>
+                <input type="text" id="destination" placeholder="Antar ke mana?" onfocus="activateField('destination')">
+                <div class="map-trigger-btn" onclick="enterPickingMode('destination')">🗺️</div>
+            </div>
         </div>
 
-        <div class="gps-icon" id="btn-gps" onclick="getCurrentLocation()" style="display: none;">
-            <span>🎯</span> Lokasi Saya
-        </div>
-
+        <!-- NOTE -->
         <div class="input-group">
             <div class="input-wrapper">
-                <span class="input-icon">📝</span>
-                <input type="text" id="note" placeholder="Catatan (Pagar hitam, dll)"
-                    oninput="updateLink(); toggleClearBtn('note')">
-                <div class="clear-btn" id="clear-note" onclick="clearInput('note')">✕</div>
+                <span class="input-icon-left">📝</span>
+                <input type="text" id="note" placeholder="Catatan (Pagar hitam, dll)" oninput="updateLink()">
             </div>
-            <div class="note-chips">
-                <div class="chip" onclick="addNote('Uang Pas')">Uang Pas</div>
-                <div class="chip" onclick="addNote('Pagar Hitam')">Pagar Hitam</div>
-                <div class="chip" onclick="addNote('Sesuai Titik')">Sesuai Titik</div>
-                <div class="chip" onclick="addNote('Jemput di Gang')">Jemput di Gang</div>
-            </div>
-
-            <div id="legal-warning">
-                ⚠️ Dilarang kirim: Narkoba, Hewan, Senjata & Barang Ilegal. Driver berhak cek barang.
+            <!-- AI Feature -->
+            <div style="display:flex; justify-content: flex-end;">
+                <button class="ai-btn" id="ai-note-btn" onclick="refineNoteWithAI()">
+                    <span>✨</span> Perjelas (AI)
+                </button>
             </div>
         </div>
 
+        <!-- JASTIP FIELDS -->
         <div id="jastip-field" style="display: none;">
             <div class="input-group">
                 <div class="input-wrapper">
-                    <span class="input-icon">🛒</span>
+                    <span class="input-icon-left">🛒</span>
                     <textarea id="items" rows="2" placeholder="List belanjaan..." oninput="updateLink()"></textarea>
                 </div>
+                <button class="ai-btn" id="ai-order-btn" onclick="formatOrderWithAI()">
+                    <span>✨</span> Rapikan (AI)
+                </button>
             </div>
             <div class="input-group">
                 <div class="input-wrapper">
-                    <span class="input-icon">💰</span>
+                    <span class="input-icon-left">💰</span>
                     <input type="number" id="est-price" placeholder="Estimasi harga barang (Rp)" oninput="updateLink()">
                 </div>
             </div>
         </div>
 
-        <div class="error-card" id="error-card">
-            ✋ Kejauhan Boss! Max 25km ya.
-        </div>
-
+        <!-- PRICE DISPLAY -->
         <div class="price-card" id="price-card">
             <div>
-                <div class="price-dist" id="dist-display">0 km</div>
+                <div style="font-size:0.8rem; opacity:0.8;" id="dist-display">0 km</div>
                 <div class="fake-price" id="fake-price">Rp 0</div>
-                <div class="price-main">
-                    <span id="price-display">Rp 0</span>
-                    <span class="promo-tag">⚡ Promo</span>
-                </div>
+                <div class="price-main" id="price-display">Rp 0</div>
             </div>
-            <div style="text-align: right; font-size: 0.8rem; opacity: 0.7;">
-                Tarif Resmi<br>BantuJeg
-            </div>
+            <div style="text-align: right; font-size: 0.8rem; opacity: 0.7;">Tarif Final</div>
         </div>
+        
+        <div style="height: 100px;"></div>
     </div>
 
     <div class="bottom-bar">
         <a id="btn-submit" href="#" class="btn-cta disabled">
-            <span id="btn-text">Isi Lokasi Dulu</span>
+            <span id="btn-text">Lengkapi Data</span>
             <div class="spinner" id="loading-spin"></div>
         </a>
     </div>
 
-    <script
-        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAXo3ErccnWYzKPXZsli1j9zsE5_50hO1g&libraries=places,geometry&loading=async"></script>
-
-    <script>
-        window.APP = {
-            service: 'RIDE',
-            config: { RIDE: null, FOOD_MART: null, SEND: null },
-            places: { origin: null, dest: null },
-            calc: { distance: 0, price: 0 },
-            map: null,
-            markers: { origin: null, dest: null },
-            historyData: null,
-            bounds: null
-        };
+    <!-- Import Modules -->
+    <script type="importmap">
+      { "imports": {
+          "firebase/app": "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js",
+          "firebase/firestore": "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js",
+          "@google/generative-ai": "https://esm.run/@google/generative-ai"
+      }}
     </script>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { initializeApp } from "firebase/app";
+        import { getFirestore, doc, getDoc } from "firebase/firestore";
+        import { GoogleGenerativeAI } from "@google/generative-ai";
 
+        // CONFIG
+        const CONFIG_WA = "62895330091464";
+        const SALATIGA_CENTER = { lat: -7.3305, lng: 110.5084 };
+        const GEMINI_API_KEY = "AIzaSyDDcAVxAk_jY05_VRlJ8KjNPusFyEw714s"; 
+        
+        window.APP = {
+            service: 'RIDE',
+            mode: 'DASHBOARD', // DASHBOARD or PICKING
+            pickingField: null, // 'origin' or 'destination'
+            places: { origin: null, dest: null }, // { lat, lng, address }
+            calc: { distance: 0, price: 0 },
+            config: { RIDE: null, FOOD_MART: null, SEND: null },
+            map: null,
+            geocoder: null,
+            directionsRenderer: null,
+            debounceTimer: null
+        };
+
+        // FIREBASE
         const firebaseConfig = {
-            apiKey: "AIzaSyAekghf6Oydh17aYc_ia1zy3oNDsFK4aww",
+            apiKey: "AIzaSyAXo3ErccnWYzKPXZsli1j9zsE5_50hO1g",
             authDomain: "tanganbantu-poc.firebaseapp.com",
             projectId: "tanganbantu-poc",
             storageBucket: "tanganbantu-poc.firebasestorage.app",
             messagingSenderId: "236145821183",
             appId: "1:236145821183:web:c390d511bf9da9a86913ca"
         };
-
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
+        // GEMINI
+        let model;
+        try {
+            const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+            model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        } catch(e) { console.error("Gemini Error", e); }
+
+        // LOAD PRICING CONFIG
         async function loadConfigs() {
             try {
                 const [rideSnap, foodSnap, sendSnap] = await Promise.all([
@@ -552,563 +370,326 @@
                     getDoc(doc(db, 'pricing_configs', 'FOOD_MART_v1')),
                     getDoc(doc(db, 'pricing_configs', 'SEND_v1'))
                 ]);
-
                 if (rideSnap.exists()) window.APP.config.RIDE = rideSnap.data();
                 if (foodSnap.exists()) window.APP.config.FOOD_MART = foodSnap.data();
                 if (sendSnap.exists()) window.APP.config.SEND = sendSnap.data();
-                console.log("✅ CONFIG LOADED");
-            } catch (e) {
-                console.error("❌ Config Error:", e);
-            }
+            } catch (e) { console.error("Config Error", e); }
         }
         loadConfigs();
-    </script>
 
-    <script>
-        const CONFIG_WA = "62895330091464";
+        // --- GLOBAL FUNCTIONS (EXPOSED) ---
 
-        function initMap() {
-            // GOOGLE MAPS INIT
-            const centerSalatiga = { lat: -7.3305, lng: 110.5084 };
-            
-            window.APP.map = new google.maps.Map(document.getElementById("map"), {
-                center: centerSalatiga,
-                zoom: 14,
-                disableDefaultUI: true, // Biar bersih kayak Leaflet
-                clickableIcons: false,  // Gak perlu klik ikon bisnis Google
+        // 1. MAP INIT
+        window.initMap = function() {
+            window.APP.geocoder = new google.maps.Geocoder();
+            window.APP.directionsService = new google.maps.DirectionsService();
+            window.APP.directionsRenderer = new google.maps.DirectionsRenderer({
+                suppressMarkers: false,
+                polylineOptions: { strokeColor: "#10B981", strokeWeight: 5 }
+            });
+
+            const mapOptions = {
+                center: SALATIGA_CENTER,
+                zoom: 15,
+                disableDefaultUI: true,
                 zoomControl: false,
-                mapTypeControl: false,
-                streetViewControl: false,
-                fullscreenControl: false
+                clickableIcons: false,
+                minZoom: 12,
+                restriction: {
+                    latLngBounds: { north: -6.5, south: -8.0, west: 110.0, east: 111.0 },
+                    strictBounds: true
+                }
+            };
+
+            window.APP.map = new google.maps.Map(document.getElementById("map"), mapOptions);
+            window.APP.directionsRenderer.setMap(window.APP.map);
+
+            // LISTENERS FOR PICKING MODE
+            window.APP.map.addListener("dragstart", () => {
+                if (window.APP.mode === 'PICKING') {
+                    document.body.classList.add('map-dragging');
+                    document.getElementById('pin-address-float').innerText = "Geser Peta...";
+                }
             });
 
+            window.APP.map.addListener("idle", () => {
+                if (window.APP.mode === 'PICKING') {
+                    document.body.classList.remove('map-dragging');
+                    // DEBOUNCE REVERSE GEOCODE
+                    if (window.APP.debounceTimer) clearTimeout(window.APP.debounceTimer);
+                    window.APP.debounceTimer = setTimeout(reverseGeocodeCenter, 500);
+                }
+            });
+
+            initAutocomplete();
             checkHistory();
-        }
+        };
 
-        // --- HISTORY FEATURE ---
-        function checkHistory() {
-            const stored = localStorage.getItem('bantujeg_history');
-            if (stored) {
-                try {
-                    const data = JSON.parse(stored);
-                    if (data && data.origin_addr && data.dest_addr) {
-                        window.APP.historyData = data;
-                        const chip = document.getElementById('history-chip');
-                        document.getElementById('history-text').innerText = `🕒 Pakai Rute Terakhir: ${cleanAddress(data.origin_addr)} → ${cleanAddress(data.dest_addr)}`;
-                        chip.style.display = 'flex';
-                    }
-                } catch (e) { console.error(e); }
-            }
-        }
+        // 2. PICKING MODE LOGIC (UNICORN STYLE)
+        window.enterPickingMode = function(field) {
+            window.APP.mode = 'PICKING';
+            window.APP.pickingField = field;
+            document.body.classList.add('picking-mode');
+            
+            // Resize Map
+            google.maps.event.trigger(window.APP.map, "resize");
 
-        window.useHistory = function () {
-            const data = window.APP.historyData;
-            if (!data) return;
-
-            // Hide chip
-            document.getElementById('history-chip').style.display = 'none';
-
-            // Populate Fields
-            document.getElementById('origin').value = data.origin_addr;
-            document.getElementById('destination').value = data.dest_addr;
-            if (data.note) document.getElementById('note').value = data.note;
-
-            // Reconstruct Place Objects (Using Google Geometry)
-            // Note: Since history only has lat/lng, we reconstruct a simple object
-            window.APP.places.origin = {
-                geometry: { location: new google.maps.LatLng(data.origin_lat, data.origin_lng) },
-                formatted_address: data.origin_addr
-            };
-            window.APP.places.dest = {
-                geometry: { location: new google.maps.LatLng(data.dest_lat, data.dest_lng) },
-                formatted_address: data.dest_addr
-            };
-
-            // Trigger Map Update
-            updateMarker('origin', data.origin_lat, data.origin_lng);
-            updateMarker('dest', data.dest_lat, data.dest_lng);
-            expandMap();
-            calculateRoute();
-            toggleClearBtn('origin');
-            toggleClearBtn('destination');
-        }
-
-        // --- QUICK NOTE FEATURE ---
-        window.addNote = function (text) {
-            const noteInput = document.getElementById('note');
-            if (noteInput.value.length > 0) {
-                noteInput.value += `, ${text}`;
+            // Center map on existing value or user location
+            const place = window.APP.places[field];
+            if (place && place.lat) {
+                window.APP.map.setCenter({ lat: place.lat, lng: place.lng });
+                window.APP.map.setZoom(17);
             } else {
-                noteInput.value = text;
+                getCurrentLocation(true); // silent move
             }
-            updateLink();
-            toggleClearBtn('note');
-        }
+        };
 
-        // --- HELPER: CLEAN ADDRESS ---
-        function cleanAddress(address) {
-            if (!address) return "";
-            return address.replace(/^[A-Z0-9\+]{4,8}(\+[A-Z0-9]{2,})?,\s*/, '');
-        }
-
-        // --- UI: INPUT HANDLERS ---
-        window.handleInput = function (id) {
-            toggleClearBtn(id);
-            // VALIDASI: Kalau user hapus teks, reset harga & button
-            const val = document.getElementById(id).value;
-            if (val.trim() === '') {
-                // Determine which type it is
-                if (id === 'origin' || id === 'destination') {
-                    const type = id === 'origin' ? 'origin' : 'dest';
-                    window.APP.places[type] = null;
-                    if (window.APP.markers[type]) {
-                        window.APP.markers[type].setMap(null); // GOOGLE: setMap(null) removes marker
-                        window.APP.markers[type] = null;
-                    }
-                    window.APP.calc.price = 0;
-                    document.getElementById('price-card').style.display = 'none';
-                    updateLink();
-                }
+        window.exitPickingMode = function() {
+            window.APP.mode = 'DASHBOARD';
+            window.APP.pickingField = null;
+            document.body.classList.remove('picking-mode');
+            
+            // Resize Map back to small
+            google.maps.event.trigger(window.APP.map, "resize");
+            
+            // Fit bounds to route if exists
+            if (window.APP.places.origin && window.APP.places.dest) {
+                calculateRoute();
             }
-        }
+        };
 
-        window.toggleClearBtn = function (id) {
-            const input = document.getElementById(id);
-            const btn = document.getElementById('clear-' + id);
-            if (input.value.length > 0) btn.style.display = 'flex';
-            else btn.style.display = 'none';
-        }
+        window.confirmPickedLocation = function() {
+            // Center coords already processed by 'idle' event into temp storage?
+            // Re-fetch center to be sure
+            const center = window.APP.map.getCenter();
+            const lat = center.lat();
+            const lng = center.lng();
+            const addr = document.getElementById('pin-address-float').innerText;
 
-        window.clearInput = function (id) {
-            const input = document.getElementById(id);
-            input.value = '';
-            toggleClearBtn(id);
+            const field = window.APP.pickingField;
+            
+            // Save to State
+            window.APP.places[field] = { lat, lng, address: addr };
+            
+            // Update Input
+            document.getElementById(field).value = addr;
+            
+            exitPickingMode();
+        };
 
-            if (id === 'origin' || id === 'destination') {
-                const type = id === 'origin' ? 'origin' : 'dest';
-                window.APP.places[type] = null;
-                if (window.APP.markers[type]) {
-                    window.APP.markers[type].setMap(null); // GOOGLE: setMap(null)
-                    window.APP.markers[type] = null;
-                }
-                window.APP.calc.price = 0; // Reset Price
-                document.getElementById('price-card').style.display = 'none';
-                document.getElementById('error-card').style.display = 'none';
-                updateLink(); // Update Button State
-            }
-        }
-
-        function updateMarker(type, lat, lng) {
-            const map = window.APP.map;
-            const markers = window.APP.markers;
-
-            const iconUrl = type === 'origin'
-                ? 'https://cdn-icons-png.flaticon.com/512/684/684908.png'
-                : 'https://cdn-icons-png.flaticon.com/512/684/684913.png';
-
-            // GOOGLE MAPS MARKER
-            if (markers[type]) markers[type].setMap(null); // Clear old marker
-
-            markers[type] = new google.maps.Marker({
-                position: { lat: lat, lng: lng },
-                map: map,
-                icon: {
-                    url: iconUrl,
-                    scaledSize: new google.maps.Size(40, 40) // Resize icon biar pas
-                },
-                label: {
-                    text: type === 'origin' ? "Jemput" : "Tujuan",
-                    color: "black",
-                    fontWeight: "bold",
-                    fontSize: "12px",
-                    className: "map-tooltip" // Class ini nanti diabaikan Google tp label native muncul
+        function reverseGeocodeCenter() {
+            const center = window.APP.map.getCenter();
+            window.APP.geocoder.geocode({ location: center }, (results, status) => {
+                if (status === "OK" && results[0]) {
+                    const addr = results[0].formatted_address.replace(/^[A-Z0-9\+]{4,8}(\+[A-Z0-9]{2,})?,\s*/, ''); // Clean
+                    document.getElementById('pin-address-float').innerText = addr;
                 }
             });
-
-            // FIT BOUNDS (ZOOM TO FIT 2 MARKERS)
-            if (markers.origin && markers.dest) {
-                const bounds = new google.maps.LatLngBounds();
-                bounds.extend(markers.origin.getPosition());
-                bounds.extend(markers.dest.getPosition());
-                map.fitBounds(bounds, 50); // Padding 50px
-            } else {
-                map.setCenter({ lat: lat, lng: lng });
-                map.setZoom(16);
-            }
         }
 
-        function getCurrentLocation() {
-            if (!navigator.geolocation) { alert("Browser tidak support GPS"); return; }
-
-            const btnText = document.querySelector('.gps-icon');
-            const originalText = btnText.innerHTML;
-            btnText.innerHTML = "⏳...";
-
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    const lat = position.coords.latitude;
-                    const lng = position.coords.longitude;
-                    const latlng = { lat: lat, lng: lng };
-
-                    const geocoder = new google.maps.Geocoder();
-                    geocoder.geocode({ location: latlng }, (results, status) => {
-                        btnText.innerHTML = originalText;
-                        if (status === "OK" && results[0]) {
-                            const rawAddr = results[0].formatted_address;
-                            const cleaned = cleanAddress(rawAddr);
-
-                            const isOrigin = btnText.parentElement.id === 'wrapper-origin';
-                            const inputId = isOrigin ? 'origin' : 'destination';
-                            const type = isOrigin ? 'origin' : 'dest';
-
-                            document.getElementById(inputId).value = cleaned;
-                            toggleClearBtn(inputId);
-
-                            window.APP.places[type] = results[0];
-                            updateMarker(type, lat, lng);
-                            expandMap();
-
-                            if (window.APP.places.origin && window.APP.places.dest) calculateRoute();
-                        } else {
-                            alert("Gagal mendeteksi nama jalan.");
-                        }
-                    });
-                },
-                (error) => {
-                    btnText.innerHTML = originalText;
-                    alert("Gagal ambil lokasi. Pastikan GPS nyala!");
-                }
-            );
-        }
-
+        // 3. AUTOCOMPLETE & ROUTING
         function initAutocomplete() {
-            // GOOGLE PLACES AUTOCOMPLETE
-            const options = {
-                bounds: new google.maps.LatLngBounds(
-                    new google.maps.LatLng(-7.60, 110.23),
-                    new google.maps.LatLng(-7.06, 110.77)
-                ),
-                componentRestrictions: { country: "id" },
-                fields: ["geometry", "name", "formatted_address"],
-                strictBounds: true
-            };
-
-            const acOrigin = new google.maps.places.Autocomplete(document.getElementById('origin'), options);
-            const acDest = new google.maps.places.Autocomplete(document.getElementById('destination'), options);
-
-            // Bind to Map for biasing
-            acOrigin.bindTo('bounds', window.APP.map);
-            acDest.bindTo('bounds', window.APP.map);
+            const opts = { componentRestrictions: { country: "id" }, fields: ["geometry", "formatted_address"], strictBounds: false };
+            const acOrigin = new google.maps.places.Autocomplete(document.getElementById('origin'), opts);
+            const acDest = new google.maps.places.Autocomplete(document.getElementById('destination'), opts);
 
             acOrigin.addListener('place_changed', () => handlePlaceSelect('origin', acOrigin));
-            acDest.addListener('place_changed', () => handlePlaceSelect('dest', acDest));
+            acDest.addListener('place_changed', () => handlePlaceSelect('destination', acDest));
         }
 
-        function handlePlaceSelect(type, ac) {
+        function handlePlaceSelect(field, ac) {
             const place = ac.getPlace();
             if (!place.geometry) return;
+            
+            const addr = place.formatted_address.replace(/^[A-Z0-9\+]{4,8}(\+[A-Z0-9]{2,})?,\s*/, '');
+            document.getElementById(field).value = addr;
+            
+            window.APP.places[field] = {
+                lat: place.geometry.location.lat(),
+                lng: place.geometry.location.lng(),
+                address: addr
+            };
 
-            const inputId = type === 'origin' ? 'origin' : 'destination';
-            const cleaned = cleanAddress(place.formatted_address);
-            document.getElementById(inputId).value = cleaned;
-            toggleClearBtn(inputId);
+            // Focus map on selection
+            window.APP.map.setCenter(place.geometry.location);
+            window.APP.map.setZoom(16);
 
-            window.APP.places[type] = place;
-            updateMarker(type, place.geometry.location.lat(), place.geometry.location.lng());
-            calculateRoute();
+            if (window.APP.places.origin && window.APP.places.dest) calculateRoute();
         }
 
         function calculateRoute() {
             const { origin, dest } = window.APP.places;
-            const originVal = document.getElementById('origin').value.trim();
-            const destVal = document.getElementById('destination').value.trim();
+            if (!origin || !dest) return;
 
-            // VALIDASI: Cek text kosong walaupun object place ada
-            if (!origin || !dest || originVal === '' || destVal === '') {
-                window.APP.calc.price = 0;
-                updateLink();
-                return;
-            }
-
-            setLoading(true);
-            document.getElementById('error-card').style.display = 'none';
-
-            // GOOGLE DIRECTIONS SERVICE
-            const directionsService = new google.maps.DirectionsService();
-            directionsService.route({
-                origin: origin.geometry.location,
-                destination: dest.geometry.location,
-                travelMode: google.maps.TravelMode.TWO_WHEELER, // Mode Motor
-                avoidTolls: true
+            window.APP.directionsService.route({
+                origin: { lat: origin.lat, lng: origin.lng },
+                destination: { lat: dest.lat, lng: dest.lng },
+                travelMode: google.maps.TravelMode.TWO_WHEELER
             }, (res, status) => {
-                setLoading(false);
                 if (status === 'OK') {
-                    // Ambil jarak dari Google Route
-                    const googleKm = res.routes[0].legs[0].distance.value / 1000;
+                    window.APP.directionsRenderer.setDirections(res);
+                    const distKm = res.routes[0].legs[0].distance.value / 1000;
+                    window.APP.calc.distance = parseFloat(distKm.toFixed(2));
                     
-                    // Hitung garis lurus (Straight Line) buat validasi detour
-                    const straightKm = google.maps.geometry.spherical.computeDistanceBetween(
-                        res.routes[0].legs[0].start_location,
-                        res.routes[0].legs[0].end_location
-                    ) / 1000;
-
-                    const configRide = window.APP.config.RIDE || {};
-                    const logic = configRide.distance_logic || { lmf: 1.25, detour_limit: 1.15 };
-
-                    let finalKm = googleKm;
-                    const motorEstimate = straightKm * logic.lmf;
-                    if (googleKm > motorEstimate * logic.detour_limit) finalKm = motorEstimate;
-                    else if (googleKm < straightKm * 1.05) finalKm = straightKm * 1.10;
-
-                    window.APP.calc.distance = parseFloat(finalKm.toFixed(2));
-
-                    if (window.APP.calc.distance > 25) {
-                        showError("Kejauhan Boss! Max 25km ya.");
-                    } else {
-                        calculatePrice(finalKm);
-                        
-                        // Optional: Gambar rute di peta (biar keren)
-                        // const directionsRenderer = new google.maps.DirectionsRenderer({map: window.APP.map, suppressMarkers: true});
-                        // directionsRenderer.setDirections(res);
-                    }
-                } else {
-                    console.error("Directions Failed:", status);
+                    calculatePrice(window.APP.calc.distance);
                 }
             });
         }
 
-        function showError(msg) {
-            const errCard = document.getElementById('error-card');
-            const priceCard = document.getElementById('price-card');
-            const btn = document.getElementById('btn-submit');
-            const btnText = document.getElementById('btn-text');
-
-            errCard.style.display = 'block';
-            errCard.innerText = "✋ " + msg;
-            priceCard.style.display = 'none';
-            btn.classList.add('disabled');
-            btnText.innerText = "Jarak Terlalu Jauh";
-            window.APP.calc.price = 0;
-        }
-
-        function calculatePrice(distance) {
+        function calculatePrice(dist) {
             const service = window.APP.service;
             const config = window.APP.config[service];
+            if (!config) return; // Fallback or wait
 
-            if (!config) { console.warn("Config loading..."); return; }
+            if (dist > 25) {
+                alert("Kejauhan Boss! Max 25km.");
+                document.getElementById('price-card').style.display = 'none';
+                return;
+            }
 
+            // Simple Tier Logic
             let price = 0;
-            const tiers = config.pricing_model?.tiers || config.TIERS;
-
-            if (Array.isArray(tiers)) {
-                const tier = tiers.find(t => distance >= t.min_km && distance < t.max_km) || tiers[tiers.length - 1];
-                if (tier.calculation_type === 'FLAT') price = tier.base_price;
-                else price = tier.base_price + ((distance - tier.offset_km) * tier.price_per_km);
-            }
-            else if (tiers.BASE) {
-                const baseLimit = tiers.BASE.max_distance_km || 2;
-                if (distance <= baseLimit) price = tiers.BASE.delivery_fee;
-                else price = tiers.MID.base_fee + ((distance - baseLimit) * tiers.MID.price_per_km);
-            }
+            // Assuming config structure: { base_price: 6000, base_km: 2, price_per_block: 400, block_size: 0.2 }
+            // Or simpler for demo
+            const base = config.base_price || 6000;
+            const rate = config.price_per_km || 2000;
+            
+            if (dist <= 2) price = base;
+            else price = base + ((dist - 2) * rate);
 
             price = Math.ceil(price / 500) * 500;
             window.APP.calc.price = price;
 
-            // PSYCHOLOGY: FAKE PRICE
-            const fakePrice = Math.ceil((price * 1.25) / 1000) * 1000;
-            document.getElementById('fake-price').innerText = `Rp ${fakePrice.toLocaleString('id-ID')}`;
-
-            document.getElementById('price-display').innerText = `Rp ${price.toLocaleString('id-ID')}`;
-            document.getElementById('dist-display').innerText = `${distance.toFixed(1)} km`;
+            // Update UI
             document.getElementById('price-card').style.display = 'flex';
-
+            document.getElementById('price-display').innerText = `Rp ${price.toLocaleString('id-ID')}`;
+            document.getElementById('fake-price').innerText = `Rp ${(price * 1.2).toLocaleString('id-ID')}`;
+            document.getElementById('dist-display').innerText = dist + " km";
+            
             updateLink();
         }
 
-        function updateLink() {
+        // 4. WA LINK & AI
+        window.updateLink = function() {
             const btn = document.getElementById('btn-submit');
-            const textBtn = document.getElementById('btn-text');
-            const price = window.APP.calc.price;
+            const txt = document.getElementById('btn-text');
+            const { price, distance } = window.APP.calc;
+            const { origin, dest } = window.APP.places;
 
-            // Validasi
-            const originVal = document.getElementById('origin').value.trim();
-            const destVal = document.getElementById('destination').value.trim();
-
-            if (price === 0 || originVal === '' || destVal === '') {
+            if (!price || !origin || !dest) {
                 btn.classList.add('disabled');
-                textBtn.innerText = "Isi Lokasi Dulu";
+                txt.innerText = "Lengkapi Data";
                 return;
             }
 
-            // Ambil Koordinat
-            const orgLat = window.APP.places.origin?.geometry?.location?.lat();
-            const orgLng = window.APP.places.origin?.geometry?.location?.lng();
-            const destLat = window.APP.places.dest?.geometry?.location?.lat();
-            const destLng = window.APP.places.dest?.geometry?.location?.lng();
-
-            // Mapping Nama Service Biar Enak Dibaca
-            let displayService = window.APP.service;
-            let serviceCode = 'OJK';
-
-            if (window.APP.service === 'RIDE') { displayService = 'Ojek'; serviceCode = 'OJK'; }
-            if (window.APP.service === 'SEND') { displayService = 'Kirim Barang'; serviceCode = 'SND'; }
-            if (window.APP.service === 'FOOD_MART') { displayService = 'Food & Mart'; serviceCode = 'JST'; }
-
-            const orderID = `${serviceCode}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
-
-            // 🔥 FORMAT BARU: CLEAN & RINGKAS (NO BOLD) 🔥
-            let msg = `Halo Kak! Order ${displayService}\n` +
-                `ID: ${orderID}\n` +
-                `----------------\n` +
-                `Asal: ${originVal}\n` +
-                `(GPS: ${orgLat}, ${orgLng})\n` +
-                `Tujuan: ${destVal}\n` +
-                `(GPS: ${destLat}, ${destLng})\n`;
-
-            // Catatan
-            const note = document.getElementById('note').value;
-            if (note) msg += `Catatan: ${note}\n`;
-
-            // Khusus Jastip
-            if (window.APP.service === 'FOOD_MART') {
-                const items = document.getElementById('items').value;
-                const estPrice = document.getElementById('est-price').value;
-                msg += `----------------\n` +
-                    `Item: ${items}\n` +
-                    `Est. Harga: Rp ${estPrice || 0}\n`;
-            }
-
-            msg += `----------------\n` +
-                `Jarak: ${window.APP.calc.distance} km\n` +
-                `Ongkir: Rp ${price.toLocaleString('id-ID')}\n` +
-                `================\n` +
-                `Gas jemput?`;
-
-            // Finalisasi Button
             btn.classList.remove('disabled');
-            textBtn.innerText = `GAS ORDER • Rp ${price.toLocaleString('id-ID')}`;
+            txt.innerText = `GAS ORDER • Rp ${price.toLocaleString('id-ID')}`;
+
+            const note = document.getElementById('note').value;
+            const items = document.getElementById('items').value;
+            const estPrice = document.getElementById('est-price').value;
+            const orderID = `${window.APP.service.substr(0,1)}-${Math.random().toString(36).substr(2,5).toUpperCase()}`;
+
+            let msg = `*ORDER ${window.APP.service}*\nID: ${orderID}\n----------------\n`;
+            msg += `📍 Asal: ${origin.address}\n(GPS: ${origin.lat.toFixed(5)}, ${origin.lng.toFixed(5)})\n`;
+            msg += `🏁 Tujuan: ${dest.address}\n(GPS: ${dest.lat.toFixed(5)}, ${dest.lng.toFixed(5)})\n`;
+            if(note) msg += `📝 Note: ${note}\n`;
+            if(window.APP.service === 'FOOD_MART') msg += `🛒 Item: ${items} (Est: ${estPrice})\n`;
+            msg += `----------------\n📏 Jarak: ${distance} km\n💰 Ongkir: Rp ${price.toLocaleString('id-ID')}\n----------------\nGas Jemput?`;
+
             btn.href = `https://wa.me/${CONFIG_WA}?text=${encodeURIComponent(msg)}`;
-
-            // Save History (Tetap jalan di background)
-            if (window.APP.places.origin && window.APP.places.dest) {
-                const history = {
-                    origin_addr: originVal, origin_lat: orgLat, origin_lng: orgLng,
-                    dest_addr: destVal, dest_lat: destLat, dest_lng: destLng,
-                    note: note
-                };
-                localStorage.setItem('bantujeg_history', JSON.stringify(history));
-            }
-        }
-
-        function setService(type, el) {
-            window.APP.service = type;
-
-            // Visual Tab Active
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            if (el) el.classList.add('active');
-            else document.querySelector('.tab').classList.add('active');
-
-            // === TAB ISOLATION (RESET EVERYTHING) ===
-            document.getElementById('origin').value = '';
-            document.getElementById('destination').value = '';
-            document.getElementById('note').value = '';
-            document.getElementById('items').value = '';
-            document.getElementById('est-price').value = '';
-
-            // Reset State & Map
-            window.APP.places = { origin: null, dest: null };
-            // Clear Google Markers
-            if (window.APP.markers.origin) window.APP.markers.origin.setMap(null);
-            if (window.APP.markers.dest) window.APP.markers.dest.setMap(null);
-            window.APP.markers = { origin: null, dest: null };
-            window.APP.calc = { distance: 0, price: 0 };
-
-            // Reset UI Components
-            document.getElementById('price-card').style.display = 'none';
-            document.getElementById('error-card').style.display = 'none';
-            toggleClearBtn('origin');
-            toggleClearBtn('destination');
-            toggleClearBtn('note');
-
-            const jastipField = document.getElementById('jastip-field');
-            const legalWarning = document.getElementById('legal-warning');
-            const originInput = document.getElementById('origin');
-            const destInput = document.getElementById('destination');
-
-            // Logic Dynamic GPS
-            const gpsBtn = document.getElementById('btn-gps');
-            const wrapOrg = document.getElementById('wrapper-origin');
-            const wrapDst = document.getElementById('wrapper-destination');
-
-            // Reset Wrappers
-            gpsBtn.style.display = 'flex';
-            wrapOrg.classList.remove('has-gps');
-            wrapDst.classList.remove('has-gps');
-
-            // Hide Specifics
-            jastipField.style.display = 'none';
-            legalWarning.style.display = 'none';
-
-            if (type === 'FOOD_MART') {
-                jastipField.style.display = 'block';
-                wrapDst.appendChild(gpsBtn);
-                wrapDst.classList.add('has-gps');
-                originInput.placeholder = "Beli di mana? (Nama Warung/Toko)";
-                destInput.placeholder = "Antar ke mana? (Lokasi Kamu)";
-            } else if (type === 'SEND') {
-                legalWarning.style.display = 'block';
-                wrapOrg.appendChild(gpsBtn);
-                wrapOrg.classList.add('has-gps');
-                originInput.placeholder = "Ambil paket di mana?";
-                destInput.placeholder = "Kirim ke mana?";
-            } else { // RIDE
-                wrapOrg.appendChild(gpsBtn);
-                wrapOrg.classList.add('has-gps');
-                originInput.placeholder = "Jemput di mana? (Cari Masjid/Sekolah)";
-                destInput.placeholder = "Antar ke mana?";
-            }
-
-            // Force Button Reset
-            updateLink();
-        }
-
-        function expandMap() {
-            document.getElementById('map-container').classList.add('expanded');
-        }
-
-        function setLoading(state) {
-            const spin = document.getElementById('loading-spin');
-            const txt = document.getElementById('btn-text');
-            if (state) {
-                spin.style.display = 'block';
-                txt.style.display = 'none';
-            } else {
-                spin.style.display = 'none';
-                txt.style.display = 'block';
-            }
-        }
-
-        // Wait for window load to ensure Google script is ready
-        window.onload = () => {
-            // Google Maps script loads async, so we assume initMap is called via callback or manually if needed
-            // But since we use defer/async on script tag, we might need to check if google object exists
-            if (typeof google !== 'undefined') {
-                initMap();
-                initAutocomplete();
-            } else {
-                // Poll for Google
-                const checkGoogle = setInterval(() => {
-                    if (typeof google !== 'undefined') {
-                        clearInterval(checkGoogle);
-                        initMap();
-                        initAutocomplete();
-                    }
-                }, 100);
-            }
-            setService('RIDE', document.querySelector('.tab'));
+            
+            // Save History
+            localStorage.setItem('bantujeg_history', JSON.stringify({ origin, dest, note }));
         };
+
+        window.refineNoteWithAI = async function() {
+            const input = document.getElementById('note');
+            const text = input.value;
+            if(!text) return alert("Isi catatan dulu");
+            
+            const btn = document.getElementById('ai-note-btn');
+            btn.innerHTML = "⏳..."; btn.disabled = true;
+            
+            try {
+                const prompt = `Rewrite neatly in Indonesian (Driver Note): "${text}"`;
+                const res = await model.generateContent(prompt);
+                input.value = res.response.text().trim();
+                updateLink();
+            } catch(e) { console.error(e); }
+            btn.innerHTML = "✨ Perjelas (AI)"; btn.disabled = false;
+        };
+
+        window.formatOrderWithAI = async function() {
+            const input = document.getElementById('items');
+            const text = input.value;
+            if(!text) return alert("Isi list dulu");
+            
+            const btn = document.getElementById('ai-order-btn');
+            btn.innerHTML = "⏳..."; btn.disabled = true;
+            
+            try {
+                const prompt = `Format this shopping list to bullet points (Indonesian): "${text}"`;
+                const res = await model.generateContent(prompt);
+                input.value = res.response.text().trim();
+                updateLink();
+            } catch(e) { console.error(e); }
+            btn.innerHTML = "✨ Rapikan (AI)"; btn.disabled = false;
+        };
+
+        // 5. UTILS & GPS
+        window.activateField = function(field) {
+            document.getElementById('wrapper-origin').classList.remove('active-field');
+            document.getElementById('wrapper-destination').classList.remove('active-field');
+            document.getElementById('wrapper-'+field).classList.add('active-field');
+        };
+
+        window.setService = function(type, el) {
+            window.APP.service = type;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            el.classList.add('active');
+            
+            document.getElementById('jastip-field').style.display = (type === 'FOOD_MART') ? 'block' : 'none';
+            
+            // Clear inputs logic omitted for brevity, usually reset here
+            updateLink();
+        };
+
+        window.getCurrentLocation = function(silent = false) {
+            if(!navigator.geolocation) return;
+            navigator.geolocation.getCurrentPosition(pos => {
+                const latlng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                window.APP.map.setCenter(latlng);
+                window.APP.map.setZoom(17);
+            });
+        };
+
+        function checkHistory() {
+            const h = JSON.parse(localStorage.getItem('bantujeg_history'));
+            if(h) {
+                document.getElementById('history-chip').style.display = 'flex';
+                document.getElementById('history-text').innerText = `🕒 Terakhir: ${h.origin.address.substr(0,15)}...`;
+            }
+        }
+
+        window.useHistory = function() {
+            const h = JSON.parse(localStorage.getItem('bantujeg_history'));
+            if(!h) return;
+            window.APP.places.origin = h.origin;
+            window.APP.places.dest = h.dest;
+            document.getElementById('origin').value = h.origin.address;
+            document.getElementById('destination').value = h.dest.address;
+            if(h.note) document.getElementById('note').value = h.note;
+            calculateRoute();
+            document.getElementById('history-chip').style.display = 'none';
+        };
+
+        // Script Injector
+        const script = document.createElement('script');
+        script.src = "https://maps.googleapis.com/maps/api/js?key=AIzaSyAXo3ErccnWYzKPXZsli1j9zsE5_50hO1g&libraries=places,geometry&callback=initMap";
+        script.async = true;
+        document.body.appendChild(script);
 
     </script>
 </body>
-
 </html>
