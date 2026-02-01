@@ -3,8 +3,11 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, minimal-ui">
     <meta name="theme-color" content="#ffffff">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>BantuJeg - Order Cepat</title>
 
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
@@ -29,11 +32,29 @@
             -webkit-tap-highlight-color: transparent;
         }
 
+        html {
+            /* Prevent iOS bounce/rubber-banding */
+            overscroll-behavior: none;
+            -webkit-overflow-scrolling: touch;
+            /* Lock height on mobile to prevent resize on keyboard */
+            height: 100%;
+            position: fixed;
+            overflow: hidden;
+            width: 100%;
+        }
+
         body {
             font-family: 'Plus Jakarta Sans', sans-serif;
             background: #ffffff;
             color: var(--dark);
             padding-bottom: 100px;
+            /* Mobile optimizations */
+            height: 100%;
+            overflow-y: auto;
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior-y: contain;
+            position: relative;
         }
 
         header {
@@ -102,6 +123,8 @@
             transform: translateZ(0);
             backface-visibility: hidden;
             will-change: height;
+            /* CRITICAL for mobile: prevent layout shift on keyboard */
+            contain: layout style paint;
         }
 
         #map-container.expanded {
@@ -112,8 +135,11 @@
             width: 100%;
             height: 100%;
             /* Hardware acceleration */
-            transform: translateZ(0);
+            transform: translate3d(0, 0, 0);
             backface-visibility: hidden;
+            /* CRITICAL: Isolate map rendering layer */
+            isolation: isolate;
+            contain: strict;
         }
 
         .card-interface {
@@ -504,8 +530,11 @@
             width: 100%;
             height: 100%;
             /* Hardware acceleration for smooth picker map */
-            transform: translateZ(0);
+            transform: translate3d(0, 0, 0);
             backface-visibility: hidden;
+            /* CRITICAL: Prevent mobile jitter */
+            isolation: isolate;
+            contain: strict;
         }
 
         .center-pin {
@@ -814,6 +843,32 @@
             });
             window.APP.directionsRenderer.setMap(window.APP.map);
 
+            // MOBILE FIX: Prevent map resize on viewport changes (keyboard open/close)
+            let resizeTimer;
+            const debouncedResize = () => {
+                if (resizeTimer) clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(() => {
+                    google.maps.event.trigger(window.APP.map, 'resize');
+                }, 300);
+            };
+
+            // Only resize on actual window resize, not on keyboard
+            let lastWidth = window.innerWidth;
+            window.addEventListener('resize', () => {
+                const currentWidth = window.innerWidth;
+                // Only resize map if width changed (not keyboard open/close)
+                if (Math.abs(currentWidth - lastWidth) > 10) {
+                    debouncedResize();
+                    lastWidth = currentWidth;
+                }
+            });
+
+            // Prevent map pan/zoom jitter on touch
+            window.APP.map.addListener('dragstart', () => {
+                if (window.APP.boundsTimer) clearTimeout(window.APP.boundsTimer);
+                if (window.APP.routeTimer) clearTimeout(window.APP.routeTimer);
+            });
+
             checkHistory();
         }
 
@@ -920,6 +975,13 @@
         }
 
         function updateMarker(type, lat, lng) {
+            // MOBILE FIX: Skip if keyboard is open or user is typing
+            if (window.APP.skipMapUpdate) {
+                // Save the update for later
+                window.APP.pendingMarkerUpdate = { type, lat, lng };
+                return;
+            }
+
             const map = window.APP.map;
             const markers = window.APP.markers;
 
@@ -1045,6 +1107,11 @@
             window.APP.places[type] = place;
             updateMarker(type, place.geometry.location.lat(), place.geometry.location.lng());
             calculateRoute();
+
+            // MOBILE FIX: Blur input to close keyboard and prevent viewport jitter
+            setTimeout(() => {
+                document.getElementById(inputId).blur();
+            }, 100);
         }
 
         function calculateRoute() {
@@ -1284,7 +1351,17 @@
         }
 
         function expandMap() {
-            document.getElementById('map-container').classList.add('expanded');
+            const container = document.getElementById('map-container');
+            if (!container.classList.contains('expanded')) {
+                container.classList.add('expanded');
+                
+                // MOBILE FIX: Trigger map resize after expansion animation
+                setTimeout(() => {
+                    if (window.APP.map) {
+                        google.maps.event.trigger(window.APP.map, 'resize');
+                    }
+                }, 350); // After 0.3s transition + buffer
+            }
         }
 
         function setLoading(state) {
@@ -1501,7 +1578,64 @@
                 }, 100);
             }
             setService('RIDE', document.querySelector('.tab'));
+
+            // MOBILE ANTI-JITTER: Initialize after everything is loaded
+            setTimeout(initMobileOptimizations, 500);
         };
+
+        // CRITICAL MOBILE FIX: Prevent map jitter on keyboard open/close
+        function initMobileOptimizations() {
+            let originalViewportHeight = window.innerHeight;
+            let isKeyboardOpen = false;
+
+            // Detect keyboard open/close
+            window.addEventListener('resize', () => {
+                const currentHeight = window.innerHeight;
+                const heightDiff = Math.abs(originalViewportHeight - currentHeight);
+                
+                // Keyboard opened/closed (>150px height change)
+                if (heightDiff > 150) {
+                    isKeyboardOpen = currentHeight < originalViewportHeight;
+                    
+                    if (isKeyboardOpen) {
+                        window.APP.skipMapUpdate = true;
+                    } else {
+                        setTimeout(() => {
+                            window.APP.skipMapUpdate = false;
+                        }, 300);
+                    }
+                }
+            });
+
+            // Prevent map updates when typing
+            const inputs = ['origin', 'destination'];
+            inputs.forEach(inputId => {
+                const input = document.getElementById(inputId);
+                if (input) {
+                    input.addEventListener('focus', () => {
+                        window.APP.skipMapUpdate = true;
+                    });
+                    
+                    input.addEventListener('blur', () => {
+                        setTimeout(() => {
+                            window.APP.skipMapUpdate = false;
+                        }, 300);
+                    });
+                }
+            });
+
+            // Prevent touch-related jitter
+            document.body.addEventListener('touchmove', (e) => {
+                if (e.target.closest('#map') || e.target.closest('#picker-map')) {
+                    // Allow map scrolling
+                } else {
+                    // Prevent overscroll on body
+                    if (e.cancelable) {
+                        e.preventDefault();
+                    }
+                }
+            }, { passive: false });
+        }
 
     </script>
 </body>
