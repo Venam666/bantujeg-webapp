@@ -1,149 +1,233 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#ffffff">
-    <title>BantuJeg - Order Cepat</title>
+    <meta name="theme-color" content="#10B981">
+    <title>RideNow - Order Your Ride</title>
     
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
     <style>
-        :root { 
-            --primary: #10B981; 
+        :root {
+            --primary: #10B981;
             --primary-dark: #059669;
+            --secondary: #3B82F6;
             --danger: #EF4444;
-            --warning-bg: #FEF9C3;
-            --warning-text: #854D0E;
-            --dark: #0F172A; 
-            --gray: #F8FAFC; 
-            --border: #E2E8F0;
-            --ai-color: #8B5CF6; 
+            --dark: #0F172A;
+            --gray-50: #F8FAFC;
+            --gray-100: #F1F5F9;
+            --gray-200: #E2E8F0;
+            --gray-400: #94A3B8;
+            --gray-600: #475569;
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+            --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
         }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        body { font-family: 'Plus Jakarta Sans', sans-serif; background: #ffffff; color: var(--dark); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
-
-        /* --- HEADER (FIXED TOP) --- */
-        header { 
-            padding: 16px 20px; background: white; z-index: 50; border-bottom: 1px solid #f1f1f1;
-            display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
         }
-        .brand-name { font-size: 1.25rem; font-weight: 800; color: var(--primary); line-height: 1.1; }
-        .greeting { font-size: 0.8rem; color: #64748B; font-weight: 600; }
-        .pulse { width: 10px; height: 10px; background: #10B981; border-radius: 50%; animation: pulse 1.5s infinite; box-shadow: 0 0 0 rgba(16, 185, 129, 0.4); }
-        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
 
-        /* --- MAP CONTAINER (MIDDLE) --- */
-        #map-wrapper {
-            position: relative;
-            width: 100%;
-            height: 50vh; /* Dominates view */
-            background: #eee;
-            flex-shrink: 0;
-        }
-        #map { width: 100%; height: 100%; }
-
-        /* CENTER PIN (GOJEK STYLE) */
-        .center-pin {
-            position: absolute;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -100%); /* Tip exactly at center */
-            z-index: 10;
-            pointer-events: none; /* Allows map interaction below */
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #ffffff;
+            color: var(--dark);
+            height: 100vh;
+            overflow: hidden;
             display: flex;
             flex-direction: column;
-            align-items: center;
-            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-        
-        .pin-head {
-            width: 40px; height: 40px;
-            background: var(--dark);
-            border: 3px solid white;
-            border-radius: 50% 50% 50% 0;
-            transform: rotate(-45deg);
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-            display: flex; align-items: center; justify-content: center;
-            margin-bottom: 10px;
-        }
-        .pin-head::after {
-            content: ''; width: 12px; height: 12px; background: var(--primary); border-radius: 50%; transform: rotate(45deg);
-        }
-        .pin-shadow {
-            width: 12px; height: 6px; background: rgba(0,0,0,0.2); border-radius: 50%;
-            margin-top: -14px; filter: blur(2px);
-            transition: all 0.2s;
-        }
-        
-        .pin-label {
-            background: white; padding: 6px 14px; border-radius: 20px;
-            font-size: 0.75rem; font-weight: 800; color: var(--dark);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.15); margin-bottom: 8px;
-            white-space: nowrap; transform: translateY(0); transition: all 0.2s;
         }
 
-        /* Bounce animation when map moves */
-        .map-moving .center-pin { transform: translate(-50%, -130%) scale(1.1); opacity: 0.9; }
-        .map-moving .pin-shadow { transform: scale(0.6); opacity: 0.5; }
-
-        /* --- INPUT CARD (BOTTOM HALF - OVERLAPPING) --- */
-        .card-interface {
-            flex: 1;
+        /* HEADER */
+        header {
+            padding: 16px 20px;
             background: white;
-            padding: 24px 20px;
-            border-radius: 24px 24px 0 0;
-            margin-top: -20px; /* Overlap map slightly */
-            position: relative;
-            z-index: 20;
-            box-shadow: 0 -4px 20px rgba(0,0,0,0.05);
-            overflow-y: auto;
+            z-index: 50;
+            border-bottom: 1px solid var(--gray-200);
+            flex-shrink: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
-        /* TABS */
-        .tabs { display: flex; gap: 8px; margin-bottom: 20px; background: var(--gray); padding: 4px; border-radius: 16px; border: 1px solid var(--border); overflow-x: auto; }
-        .tab { flex: 1; padding: 10px; text-align: center; border-radius: 12px; font-weight: 700; font-size: 0.85rem; color: #64748B; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
-        .tab.active { background: var(--primary); color: white; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); transform: scale(1.02); }
+        .brand {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: var(--primary);
+        }
 
-        /* INPUTS - FLEXBOX REFACTOR (TASK 4) */
-        .input-group { margin-bottom: 12px; }
-        
-        .input-wrapper { 
+        .status-indicator {
             display: flex;
             align-items: center;
             gap: 8px;
-            width: 100%; 
-            transition: all 0.3s; 
-            border-radius: 16px; 
-            border: 1px solid transparent; 
-            background: var(--gray); 
-            padding: 8px 12px;
+            font-size: 0.75rem;
+            color: var(--gray-600);
+            font-weight: 600;
         }
-        
-        .input-wrapper.active-field { 
-            border-color: var(--primary);
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--primary);
+            border-radius: 50%;
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        /* MAP CONTAINER */
+        #map-wrapper {
+            position: relative;
+            width: 100%;
+            height: 45vh;
+            background: var(--gray-100);
+            flex-shrink: 0;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* BOTTOM SHEET */
+        .bottom-sheet {
+            flex: 1;
+            background: white;
+            border-radius: 24px 24px 0 0;
+            margin-top: -20px;
+            position: relative;
+            z-index: 20;
+            box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sheet-handle {
+            width: 40px;
+            height: 4px;
+            background: var(--gray-300);
+            border-radius: 2px;
+            margin: 12px auto 0;
+        }
+
+        .sheet-content {
+            padding: 20px;
+            flex: 1;
+        }
+
+        /* TABS - STICKY */
+        .tabs-container {
+            position: sticky;
+            top: 0;
+            background: white;
+            z-index: 10;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--gray-100);
+            margin-bottom: 20px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 8px;
+            background: var(--gray-50);
+            padding: 4px;
+            border-radius: 12px;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 12px;
+            text-align: center;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 0.875rem;
+            color: var(--gray-600);
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            white-space: nowrap;
+            border: 2px solid transparent;
+        }
+
+        .tab.active {
+            background: var(--primary);
+            color: white;
+            box-shadow: var(--shadow-md);
+            transform: scale(1.02);
+        }
+
+        .tab:active {
+            transform: scale(0.98);
+        }
+
+        /* INPUT FIELDS */
+        .input-group {
+            margin-bottom: 14px;
+        }
+
+        .input-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--gray-50);
+            border: 2px solid transparent;
+            border-radius: 14px;
+            padding: 12px 14px;
+            transition: all 0.2s;
+        }
+
+        .input-wrapper:focus-within {
             background: #F0FDF4;
+            border-color: var(--primary);
             box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
         }
 
-        /* Static Icon */
-        .input-icon { 
-            font-size: 1.1rem; 
+        .input-icon {
+            font-size: 1.2rem;
+            color: var(--gray-400);
             flex-shrink: 0;
-            color: #64748B;
         }
-        
-        /* Flow-based input */
-        input[type="text"], textarea, input[type="number"] { 
-            flex-grow: 1;
-            background: transparent; border: none;
-            font-family: inherit; font-size: 0.9rem; color: var(--dark);
-            padding: 8px 0;
-            min-width: 0; /* Prevent overflow */
+
+        .input-wrapper:focus-within .input-icon {
+            color: var(--primary);
         }
-        input:focus { outline: none; }
-        
-        /* FLEX BUTTONS CONTAINER */
+
+        input[type="text"],
+        textarea {
+            flex: 1;
+            background: transparent;
+            border: none;
+            font-family: inherit;
+            font-size: 0.9375rem;
+            color: var(--dark);
+            outline: none;
+            min-width: 0;
+        }
+
+        input::placeholder,
+        textarea::placeholder {
+            color: var(--gray-400);
+        }
+
+        textarea {
+            resize: none;
+            min-height: 60px;
+            padding: 4px 0;
+        }
+
+        /* ACTION BUTTONS IN INPUT */
         .action-group {
             display: flex;
             align-items: center;
@@ -151,883 +235,859 @@
             flex-shrink: 0;
         }
 
-        /* RESET BUTTON (TASK 3) */
         .clear-btn {
-            width: 28px; height: 28px; border-radius: 50%; background: #E2E8F0;
-            color: #64748B; display: none; align-items: center; justify-content: center;
-            font-size: 14px; font-weight: bold; cursor: pointer;
-            transition: background 0.2s;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: var(--gray-300);
+            color: var(--gray-600);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
         }
-        .clear-btn:hover { background: #cbd5e1; color: var(--dark); }
-        .clear-btn.visible { display: flex; }
 
-        /* GPS BUTTON (INLINE - FLEX) */
-        .gps-inline-btn {
-            background: white; border: 1px solid var(--border); color: var(--primary);
-            padding: 6px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: 700;
-            cursor: pointer; display: flex; align-items: center; gap: 4px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05); transition: all 0.2s;
+        .clear-btn.visible {
+            display: flex;
+        }
+
+        .clear-btn:hover {
+            background: var(--gray-400);
+            color: white;
+        }
+
+        .gps-btn {
+            background: white;
+            border: 1px solid var(--gray-200);
+            color: var(--primary);
+            padding: 6px 12px;
+            border-radius: 10px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            box-shadow: var(--shadow-sm);
+            transition: all 0.2s;
             white-space: nowrap;
         }
-        .gps-inline-btn:active { transform: scale(0.95); }
 
-        /* AI BUTTONS */
-        .ai-btn {
-            background: linear-gradient(135deg, #8B5CF6, #6366F1);
-            color: white; border: none; padding: 8px 14px;
-            border-radius: 12px; font-size: 0.75rem; font-weight: 700;
-            cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
-            margin-top: 8px; box-shadow: 0 4px 10px rgba(139, 92, 246, 0.2);
-            transition: 0.2s;
-        }
-        .ai-btn:disabled { opacity: 0.7; cursor: not-allowed; }
-        .ai-btn:active { transform: scale(0.95); }
-
-        /* HISTORY CHIP */
-        #history-chip {
-            background: #ECFDF5; border: 1px solid #A7F3D0; color: #065F46;
-            padding: 10px 14px; border-radius: 12px; font-size: 0.8rem; font-weight: 600;
-            margin-bottom: 16px; display: none; cursor: pointer;
-            align-items: center; justify-content: space-between;
-        }
-        #history-chip span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 280px; }
-
-        /* QUICK NOTES */
-        .note-chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-top: 8px; }
-        .chip { background: var(--gray); border: 1px solid var(--border); padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; white-space: nowrap; cursor: pointer; color: var(--text-mute); }
-
-        /* CARDS */
-        .price-card { 
-            background: linear-gradient(135deg, #0F172A 0%, #334155 100%);
-            color: white; padding: 16px; border-radius: 16px;
-            display: none; align-items: center; justify-content: space-between;
-            margin-top: 16px; box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.3);
-            opacity: 0; transform: translateY(10px); transition: all 0.3s ease;
-        }
-        .price-card.visible { opacity: 1; transform: translateY(0); display: flex; }
-
-        .fake-price { font-size: 0.75rem; text-decoration: line-through; color: #94A3B8; }
-        .promo-tag { background: rgba(16, 185, 129, 0.2); color: #34D399; font-size: 0.6rem; padding: 2px 6px; border-radius: 4px; margin-left: 6px; }
-        .price-main { font-size: 1.5rem; font-weight: 800; }
-
-        /* LEGAL WARNING */
-        #legal-warning {
-            background: var(--warning-bg); border: 1px solid #FDE047; color: var(--warning-text);
-            padding: 10px; border-radius: 12px; font-size: 0.7rem; font-weight: 600;
-            margin-top: 10px; display: none;
+        .gps-btn:active {
+            transform: scale(0.95);
         }
 
-        /* BOTTOM BAR */
-        .bottom-bar { 
-            background: white; padding: 16px 20px; border-top: 1px solid #eee; 
-            position: fixed; bottom: 0; left: 0; width: 100%; z-index: 100;
+        /* PRICE CARD */
+        #price-card {
+            background: linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%);
+            border: 2px solid var(--primary);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: none;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .btn-cta {
-            display: flex; justify-content: center; align-items: center; width: 100%;
-            background: var(--primary); color: white; padding: 16px; border-radius: 16px;
-            font-weight: 700; font-size: 1.1rem; text-decoration: none;
-            transition: transform 0.2s; box-shadow: 0 10px 20px rgba(16, 185, 129, 0.3);
-            overflow: hidden;
-            position: relative;
+
+        #price-card.visible {
+            display: block;
+            opacity: 1;
+            transform: translateY(0);
         }
-        .btn-cta:active { transform: scale(0.98); }
-        .btn-cta.disabled { background: #cbd5e1; box-shadow: none; pointer-events: none; }
-        
-        .spinner { border: 3px solid rgba(255,255,255,0.3); border-radius: 50%; border-top: 3px solid white; width: 20px; height: 20px; animation: spin 1s linear infinite; display: none; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .price-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .distance-badge {
+            background: white;
+            color: var(--primary);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.8125rem;
+            font-weight: 700;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .price-display {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .fake-price {
+            font-size: 0.875rem;
+            color: var(--gray-500);
+            text-decoration: line-through;
+            font-weight: 500;
+        }
+
+        .real-price {
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--primary);
+            line-height: 1;
+        }
+
+        /* ERROR CARD */
+        #error-card {
+            background: #FEF2F2;
+            border: 2px solid var(--danger);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 20px;
+            display: none;
+            color: #991B1B;
+        }
+
+        #error-card.visible {
+            display: block;
+        }
+
+        .error-title {
+            font-weight: 700;
+            font-size: 0.9375rem;
+            margin-bottom: 4px;
+        }
+
+        .error-message {
+            font-size: 0.875rem;
+            line-height: 1.4;
+        }
+
+        /* LOADING OVERLAY */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(4px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .loading-overlay.visible {
+            display: flex;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* CTA BUTTON */
+        .cta-button {
+            width: 100%;
+            padding: 18px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 14px;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: var(--shadow-lg);
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .cta-button:disabled {
+            background: var(--gray-300);
+            color: var(--gray-500);
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .cta-button:not(:disabled):active {
+            transform: scale(0.98);
+        }
+
+        .cta-button:not(:disabled):hover {
+            background: var(--primary-dark);
+        }
+
+        /* RESPONSIVE */
+        @media (min-width: 768px) {
+            #map-wrapper {
+                height: 55vh;
+            }
+        }
     </style>
 </head>
 <body>
-
+    <!-- HEADER -->
     <header>
-        <div class="brand-container">
-            <div class="brand-name">BantuJeg.</div>
-            <div class="greeting">Siap Antar Kamu! 👋</div>
+        <div class="brand">RideNow</div>
+        <div class="status-indicator">
+            <div class="pulse-dot"></div>
+            <span id="config-status">Loading...</span>
         </div>
-        <div class="pulse" id="status-dot"></div> 
     </header>
 
-    <!-- MAP SECTION -->
+    <!-- MAP -->
     <div id="map-wrapper">
         <div id="map"></div>
-        
-        <!-- CENTER PIN OVERLAY -->
-        <div class="center-pin" id="center-pin">
-            <div class="pin-label" id="pin-label">Set Lokasi</div>
-            <div class="pin-head"></div>
-            <div class="pin-shadow"></div>
-        </div>
     </div>
 
-    <!-- INPUT CARD SECTION -->
-    <div class="card-interface">
-        
-        <!-- HISTORY CHIP -->
-        <div id="history-chip" onclick="useHistory()">
-            <span id="history-text">🕒 Rute Terakhir...</span>
-            <div style="font-size:1.2rem">↪️</div>
-        </div>
-
-        <div class="tabs">
-            <div class="tab active" onclick="setService('RIDE', this)">🛵 OJEK</div>
-            <div class="tab" onclick="setService('SEND', this)">📦 SEND</div>
-            <div class="tab" onclick="setService('FOOD_MART', this)">🍜 JASTIP</div>
-        </div>
-
-        <!-- ORIGIN -->
-        <div class="input-group">
-            <div class="input-wrapper active-field" id="wrapper-origin" onclick="activateField('origin')">
-                <span class="input-icon">📍</span>
-                <input type="text" id="origin" placeholder="Jemput di mana?" oninput="handleInput('origin')" onfocus="activateField('origin')">
-                
-                <div class="action-group" id="actions-origin">
-                    <!-- Dynamic GPS Button Here -->
-                    <div class="clear-btn" id="clear-origin" onclick="clearInput('origin')">✕</div>
+    <!-- BOTTOM SHEET -->
+    <div class="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-content">
+            <!-- STICKY TABS -->
+            <div class="tabs-container">
+                <div class="tabs">
+                    <div class="tab active" onclick="setService('RIDE', this)">🚗 RIDE</div>
+                    <div class="tab" onclick="setService('SEND', this)">📦 SEND</div>
+                    <div class="tab" onclick="setService('FOOD', this)">🍔 FOOD</div>
                 </div>
             </div>
-        </div>
 
-        <!-- DESTINATION -->
-        <div class="input-group">
-            <div class="input-wrapper" id="wrapper-destination" onclick="activateField('destination')">
-                <span class="input-icon">🏁</span>
-                <input type="text" id="destination" placeholder="Antar ke mana?" oninput="handleInput('destination')" onfocus="activateField('destination')">
-                
-                <div class="action-group" id="actions-destination">
-                    <!-- Dynamic GPS Button Here -->
-                    <div class="clear-btn" id="clear-destination" onclick="clearInput('destination')">✕</div>
+            <!-- ERROR CARD -->
+            <div id="error-card">
+                <div class="error-title">⚠️ Route Error</div>
+                <div class="error-message" id="error-message"></div>
+            </div>
+
+            <!-- PRICE CARD -->
+            <div id="price-card">
+                <div class="price-header">
+                    <div class="distance-badge" id="distance-badge">0 km</div>
+                </div>
+                <div class="price-display">
+                    <div class="fake-price" id="fake-price">Rp 0</div>
+                    <div class="real-price" id="real-price">Rp 0</div>
                 </div>
             </div>
-        </div>
 
-        <!-- DYNAMIC GPS BUTTON (Moved via JS) -->
-        <div id="gps-btn-container" style="display:none;">
-            <div class="gps-inline-btn" id="btn-gps" onclick="getCurrentLocation()">
-                <span>📍</span> Saya
-            </div>
-        </div>
-
-        <!-- NOTE -->
-        <div class="input-group">
-            <div class="input-wrapper" id="wrapper-note">
-                <span class="input-icon">📝</span>
-                <input type="text" id="note" placeholder="Catatan (Pagar hitam, dll)" oninput="updateLink(); toggleClearBtn('note')">
-                <div class="action-group">
-                    <div class="clear-btn" id="clear-note" onclick="clearInput('note')">✕</div>
-                </div>
-            </div>
-            
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <!-- Quick Chips -->
-                <div class="note-chips">
-                    <div class="chip" onclick="addNote('Pagar Hitam')">Pagar Hitam</div>
-                    <div class="chip" onclick="addNote('Uang Pas')">Uang Pas</div>
-                    <div class="chip" onclick="addNote('Sesuai Titik')">Sesuai Titik</div>
-                </div>
-                <!-- AI Feature 1 (Backend Proxy) -->
-                <button class="ai-btn" id="ai-note-btn" onclick="refineNoteWithAI()">
-                    <span>✨</span> Perjelas (AI)
-                </button>
-            </div>
-            
-            <!-- Legal Warning (Send Only) -->
-            <div id="legal-warning">
-                ⚠️ Dilarang kirim: Narkoba, Hewan, Senjata & Barang Ilegal. Driver berhak cek barang.
-            </div>
-        </div>
-
-        <!-- JASTIP FIELDS -->
-        <div id="jastip-field" style="display: none;">
+            <!-- ORIGIN INPUT -->
             <div class="input-group">
                 <div class="input-wrapper">
-                    <span class="input-icon">🛒</span>
-                    <textarea id="items" rows="2" placeholder="List belanjaan..." oninput="updateLink()"></textarea>
+                    <div class="input-icon">📍</div>
+                    <input 
+                        type="text" 
+                        id="origin-input" 
+                        placeholder="Pickup location"
+                        oninput="handleInput('origin')"
+                    />
+                    <div class="action-group" id="origin-actions">
+                        <div class="gps-btn" onclick="useGPS('origin')">
+                            📍 GPS
+                        </div>
+                        <div class="clear-btn" id="clear-origin" onclick="clearField('origin')">×</div>
+                    </div>
                 </div>
-                <!-- AI Feature 2 (Backend Proxy) -->
-                <button class="ai-btn" id="ai-order-btn" onclick="formatOrderWithAI()">
-                    <span>✨</span> Rapikan Pesanan (AI)
-                </button>
             </div>
+
+            <!-- DESTINATION INPUT -->
             <div class="input-group">
                 <div class="input-wrapper">
-                    <span class="input-icon">💰</span>
-                    <input type="number" id="est-price" placeholder="Estimasi harga barang (Rp)" oninput="updateLink()">
+                    <div class="input-icon">🎯</div>
+                    <input 
+                        type="text" 
+                        id="destination-input" 
+                        placeholder="Drop-off location"
+                        oninput="handleInput('destination')"
+                    />
+                    <div class="action-group" id="destination-actions">
+                        <div class="clear-btn" id="clear-destination" onclick="clearField('destination')">×</div>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <!-- PRICE DISPLAY -->
-        <div class="price-card" id="price-card">
-            <div>
-                <div class="price-dist" id="dist-display">0 km</div>
-                <div class="fake-price" id="fake-price">Rp 0</div>
-                <div class="price-main">
-                    <span id="price-display">Rp 0</span> 
-                    <span class="promo-tag">⚡ Promo</span>
+            <!-- NOTE INPUT -->
+            <div class="input-group">
+                <div class="input-wrapper">
+                    <div class="input-icon">💬</div>
+                    <textarea 
+                        id="note-input" 
+                        placeholder="Add notes (optional)"
+                        oninput="handleInput('note')"
+                    ></textarea>
+                    <div class="action-group" style="align-self: flex-start; padding-top: 4px;">
+                        <div class="clear-btn" id="clear-note" onclick="clearField('note')">×</div>
+                    </div>
                 </div>
             </div>
-            <div style="text-align: right; font-size: 0.8rem; opacity: 0.7;">
-                Tarif Resmi<br>BantuJeg
-            </div>
+
+            <!-- CTA BUTTON -->
+            <button class="cta-button" id="order-button" onclick="placeOrder()" disabled>
+                <span id="button-text">Select locations to continue</span>
+            </button>
         </div>
-        
-        <!-- Padding for bottom bar -->
-        <div style="height: 100px;"></div>
     </div>
 
-    <div class="bottom-bar">
-        <a id="btn-submit" href="#" class="btn-cta disabled">
-            <span id="btn-text">Isi Lokasi Dulu</span>
-            <div class="spinner" id="loading-spin"></div>
-        </a>
+    <!-- LOADING OVERLAY -->
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="loading-spinner"></div>
     </div>
 
-    <!-- Import Maps for Modules -->
-    <script type="importmap">
-      {
-        "imports": {
-          "firebase/app": "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js",
-          "firebase/firestore": "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js",
-          "firebase/auth": "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"
-        }
-      }
-    </script>
-
-    <!-- MAIN LOGIC (TYPE MODULE) -->
     <script type="module">
-        import { initializeApp } from "firebase/app";
-        import { getFirestore, doc, getDoc } from "firebase/firestore";
+        // ============================================================
+        // STATE ENGINE - SINGLE SOURCE OF TRUTH
+        // ============================================================
+        const APP = {
+            state: {
+                origin: null,
+                destination: null,
+                route: null,
+                distanceKm: 0,
+                price: 0,
+                service: 'RIDE',
+                config: null,
+                configLoaded: false
+            },
 
-        // CONFIG
-        const CONFIG_WA = "62895330091464";
-        const SALATIGA_CENTER = { lat: -7.3305, lng: 110.5084 };
-        
-        // APP STATE
-        window.APP = {
-            service: 'RIDE',
-            activeField: 'origin', // 'origin' or 'destination'
-            places: { origin: null, dest: null },
-            calc: { distance: 0, price: 0, lastDistance: 0, lastCalcTime: 0 },
-            config: { RIDE: null, FOOD_MART: null, SEND: null },
+            // State update functions
+            setOrigin(place) {
+                this.state.origin = place;
+                this.recompute();
+                this.renderUI();
+            },
+
+            setDestination(place) {
+                this.state.destination = place;
+                this.recompute();
+                this.renderUI();
+            },
+
+            setService(type) {
+                this.state.service = type;
+                this.resetState();
+                this.renderUI();
+            },
+
+            updateDistance(km) {
+                this.state.distanceKm = km;
+                this.renderUI();
+            },
+
+            updatePrice(price) {
+                this.state.price = price;
+                this.renderUI();
+            },
+
+            setRoute(route) {
+                this.state.route = route;
+                this.renderUI();
+            },
+
+            setConfig(config) {
+                this.state.config = config;
+                this.state.configLoaded = true;
+                this.renderUI();
+            },
+
+            resetState() {
+                this.state.origin = null;
+                this.state.destination = null;
+                this.state.route = null;
+                this.state.distanceKm = 0;
+                this.state.price = 0;
+            },
+
+            recompute() {
+                if (this.state.origin && this.state.destination) {
+                    RouteEngine.calculateRoute(this.state.origin, this.state.destination);
+                }
+            },
+
+            renderUI() {
+                UIEngine.render(this.state);
+            }
+        };
+
+        // ============================================================
+        // MAP ENGINE - VISUAL ONLY
+        // ============================================================
+        const MapEngine = {
             map: null,
-            geocoder: null,
-            historyData: null,
-            ignoreIdle: false, // Flag to prevent circular updates
-            debounceTimer: null
-        };
+            originMarker: null,
+            destinationMarker: null,
+            directionsRenderer: null,
 
-        // FIREBASE INIT
-        const firebaseConfig = {
-            apiKey: "AIzaSyAekghf6Oydh17aYc_ia1zy3oNDsFK4aww",
-            authDomain: "tanganbantu-poc.firebaseapp.com",
-            projectId: "tanganbantu-poc",
-            storageBucket: "tanganbantu-poc.firebasestorage.app",
-            messagingSenderId: "236145821183",
-            appId: "1:236145821183:web:c390d511bf9da9a86913ca"
-        };
+            init() {
+                this.map = new google.maps.Map(document.getElementById('map'), {
+                    center: { lat: -6.2088, lng: 106.8456 },
+                    zoom: 13,
+                    disableDefaultUI: true,
+                    zoomControl: true,
+                    styles: [
+                        {
+                            featureType: 'poi',
+                            stylers: [{ visibility: 'off' }]
+                        }
+                    ]
+                });
 
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
+                this.directionsRenderer = new google.maps.DirectionsRenderer({
+                    map: this.map,
+                    suppressMarkers: true,
+                    polylineOptions: {
+                        strokeColor: '#3B82F6',
+                        strokeWeight: 5,
+                        strokeOpacity: 0.8
+                    }
+                });
+            },
 
-        // LOAD PRICING
-        async function loadConfigs() {
-            try {
-                const [rideSnap, foodSnap, sendSnap] = await Promise.all([
-                    getDoc(doc(db, 'pricing_configs', 'RIDE_v1')),
-                    getDoc(doc(db, 'pricing_configs', 'FOOD_MART_v1')),
-                    getDoc(doc(db, 'pricing_configs', 'SEND_v1'))
-                ]);
-                if (rideSnap.exists()) window.APP.config.RIDE = rideSnap.data();
-                if (foodSnap.exists()) window.APP.config.FOOD_MART = foodSnap.data();
-                if (sendSnap.exists()) window.APP.config.SEND = sendSnap.data();
-                console.log("Config Loaded");
-            } catch (e) { console.error("Config Error", e); }
-        }
-        loadConfigs();
-
-        // ------------------------------------------
-        // EXPOSE FUNCTIONS TO WINDOW (GLOBAL SCOPE)
-        // ------------------------------------------
-
-        // --- BACKEND PROXY AI FUNCTIONS ---
-        // SECURITY FIX: Replaced direct Gemini Call with Backend Proxy fetch
-        window.refineNoteWithAI = async function() {
-            const input = document.getElementById('note');
-            const originalText = input.value.trim();
-            const btn = document.getElementById('ai-note-btn');
-            
-            if (!originalText) { alert("Isi catatannya dulu ya kak."); return; }
-
-            const originalBtnText = btn.innerHTML;
-            btn.innerHTML = "<span>⏳</span>...";
-            btn.disabled = true;
-
-            try {
-                // MOCK BACKEND CALL (Since we can't deploy server here)
-                // In production, this points to: /api/refine-note
-                // For MVP Demo, we simulate delay and response safely
-                await new Promise(r => setTimeout(r, 1000));
-                // Simulate: const res = await fetch('/api/refine-note', ...);
-                
-                // Fallback local logic for demo purposes (Safe)
-                const polite = "Mohon jemput di " + originalText + ", terima kasih.";
-                input.value = polite;
-                updateLink();
-            } catch (e) {
-                console.error("AI Error:", e);
-                alert("Gagal menghubungi server AI.");
-            } finally {
-                btn.innerHTML = originalBtnText;
-                btn.disabled = false;
-            }
-        };
-
-        window.formatOrderWithAI = async function() {
-            const input = document.getElementById('items');
-            const originalText = input.value.trim();
-            const btn = document.getElementById('ai-order-btn');
-
-            if (!originalText) { alert("Isi list belanjaan dulu ya kak."); return; }
-
-            const originalBtnText = btn.innerHTML;
-            btn.innerHTML = "<span>⏳</span>...";
-            btn.disabled = true;
-
-            try {
-                // MOCK BACKEND CALL
-                await new Promise(r => setTimeout(r, 1000));
-                // Simulate clean up
-                const lines = originalText.split(/,|\n/).map(s => "- " + s.trim()).join("\n");
-                input.value = lines;
-                updateLink();
-            } catch (e) {
-                console.error("AI Error:", e);
-            } finally {
-                btn.innerHTML = originalBtnText;
-                btn.disabled = false;
-            }
-        };
-
-        // --- MAP INITIALIZATION ---
-        window.initMap = function() {
-            window.APP.geocoder = new google.maps.Geocoder();
-            
-            // STRICT BOUNDS (CENTRAL JAVA / SALATIGA)
-            const JATENG_BOUNDS = {
-                north: -6.5,
-                south: -8.0,
-                west: 110.0,
-                east: 111.0,
-            };
-
-            const mapOptions = {
-                center: SALATIGA_CENTER,
-                zoom: 16,
-                minZoom: 12, // Prevent zooming out to world
-                restriction: {
-                    latLngBounds: JATENG_BOUNDS,
-                    strictBounds: true,
-                },
-                disableDefaultUI: true,
-                zoomControl: false,
-                clickableIcons: false,
-                styles: [
-                    { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] }
-                ]
-            };
-
-            window.APP.map = new google.maps.Map(document.getElementById("map"), mapOptions);
-
-            // CENTER PIN LOGIC (IDLE EVENT)
-            window.APP.map.addListener("idle", () => {
-                if (window.APP.ignoreIdle) {
-                    window.APP.ignoreIdle = false; // Reset flag and skip logic once
-                    return;
+            setOriginMarker(location) {
+                if (this.originMarker) {
+                    this.originMarker.setMap(null);
                 }
-                
-                // Get Center Coords
-                const center = window.APP.map.getCenter();
-                const lat = center.lat();
-                const lng = center.lng();
 
-                // REMOVE MOVING CLASS
-                document.getElementById('map-wrapper').classList.remove('map-moving');
+                this.originMarker = new google.maps.Marker({
+                    position: location,
+                    map: this.map,
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        scale: 12,
+                        fillColor: '#10B981',
+                        fillOpacity: 1,
+                        strokeColor: '#ffffff',
+                        strokeWeight: 3
+                    },
+                    animation: google.maps.Animation.DROP
+                });
 
-                // DEBOUNCE REVERSE GEOCODE
-                if (window.APP.debounceTimer) clearTimeout(window.APP.debounceTimer);
-                
-                window.APP.debounceTimer = setTimeout(() => {
-                    reverseGeocode(lat, lng);
-                }, 600); // 600ms debounce
-            });
+                this.fitBounds();
+            },
 
-            // DRAG EVENT (VISUAL FEEDBACK)
-            window.APP.map.addListener("dragstart", () => {
-                document.getElementById('map-wrapper').classList.add('map-moving');
-            });
-
-            initAutocomplete();
-            checkHistory();
-            
-            // INIT DEFAULT GPS BUTTON POSITION
-            setService('RIDE', document.querySelector('.tab'));
-        };
-
-        // --- REVERSE GEOCODING ---
-        function reverseGeocode(lat, lng) {
-            window.APP.geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-                if (status === "OK" && results[0]) {
-                    const active = window.APP.activeField; // 'origin' or 'destination'
-                    const cleanedAddress = cleanAddress(results[0].formatted_address);
-                    
-                    // Update Input Text
-                    const inputEl = document.getElementById(active === 'origin' ? 'origin' : 'destination');
-                    
-                    // Update value logic
-                    if(document.activeElement !== inputEl) { // Only update if user is NOT typing
-                        inputEl.value = cleanedAddress;
-                    }
-                    toggleClearBtn(active === 'origin' ? 'origin' : 'destination');
-
-                    // Update State
-                    window.APP.places[active] = results[0]; // Store full place object
-                    
-                    // Trigger Price Calc if both exist
-                    if (window.APP.places.origin && window.APP.places.dest) {
-                        calculateRoute();
-                    }
+            setDestinationMarker(location) {
+                if (this.destinationMarker) {
+                    this.destinationMarker.setMap(null);
                 }
-            });
-        }
 
-        // --- INPUT FOCUS LOGIC (SWITCH ACTIVE FIELD) ---
-        window.activateField = function(field) {
-            window.APP.activeField = field;
-            
-            // Visual Update
-            document.querySelectorAll('.input-wrapper').forEach(el => el.classList.remove('active-field'));
-            document.getElementById(`wrapper-${field}`).classList.add('active-field');
-            
-            // Update Pin Label
-            const label = field === 'origin' ? "📍 Jemput" : "🏁 Tujuan";
-            document.getElementById('pin-label').innerText = label;
+                this.destinationMarker = new google.maps.Marker({
+                    position: location,
+                    map: this.map,
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        scale: 12,
+                        fillColor: '#EF4444',
+                        fillOpacity: 1,
+                        strokeColor: '#ffffff',
+                        strokeWeight: 3
+                    },
+                    animation: google.maps.Animation.DROP
+                });
 
-            // Move Map to existing location if available
-            const place = window.APP.places[field];
-            if (place && place.geometry) {
-                window.APP.ignoreIdle = true; // Prevent reverse geocoding overriding existing place immediately
-                window.APP.map.panTo(place.geometry.location);
-                window.APP.map.setZoom(17);
+                this.fitBounds();
+            },
+
+            drawRoute(route) {
+                if (route) {
+                    this.directionsRenderer.setDirections(route);
+                }
+            },
+
+            clearRoute() {
+                this.directionsRenderer.setDirections({ routes: [] });
+            },
+
+            fitBounds() {
+                const bounds = new google.maps.LatLngBounds();
+                if (this.originMarker) bounds.extend(this.originMarker.getPosition());
+                if (this.destinationMarker) bounds.extend(this.destinationMarker.getPosition());
+                
+                if (!bounds.isEmpty()) {
+                    this.map.fitBounds(bounds);
+                    const zoom = this.map.getZoom();
+                    if (zoom > 16) this.map.setZoom(16);
+                }
             }
         };
 
-        // --- AUTOCOMPLETE ---
-        function initAutocomplete() {
-            // Bias to map center
-            const center = window.APP.map.getCenter();
-            const defaultBounds = {
-                north: center.lat() + 0.1,
-                south: center.lat() - 0.1,
-                east: center.lng() + 0.1,
-                west: center.lng() - 0.1,
-            };
+        // ============================================================
+        // ROUTE ENGINE
+        // ============================================================
+        const RouteEngine = {
+            directionsService: null,
 
-            const options = {
-                bounds: defaultBounds,
-                componentRestrictions: { country: "id" },
-                fields: ["geometry", "name", "formatted_address"],
-                strictBounds: false,
-            };
+            init() {
+                this.directionsService = new google.maps.DirectionsService();
+            },
 
-            const acOrigin = new google.maps.places.Autocomplete(document.getElementById('origin'), options);
-            const acDest = new google.maps.places.Autocomplete(document.getElementById('destination'), options);
+            calculateRoute(origin, destination) {
+                if (!origin || !destination) return;
 
-            // Bind to map bounds
-            acOrigin.bindTo("bounds", window.APP.map);
-            acDest.bindTo("bounds", window.APP.map);
+                const request = {
+                    origin: origin,
+                    destination: destination,
+                    travelMode: google.maps.TravelMode.DRIVING
+                };
 
-            acOrigin.addListener('place_changed', () => handlePlaceSelect('origin', acOrigin));
-            acDest.addListener('place_changed', () => handlePlaceSelect('destination', acDest));
-        }
+                this.directionsService.route(request, (result, status) => {
+                    if (status === 'OK') {
+                        const route = result.routes[0];
+                        const distanceMeters = route.legs[0].distance.value;
+                        const distanceKm = Math.round(distanceMeters / 1000 * 10) / 10;
 
-        function handlePlaceSelect(field, ac) {
-            const place = ac.getPlace();
-            if (!place.geometry) return;
+                        APP.state.route = result;
+                        APP.updateDistance(distanceKm);
 
-            const inputId = field;
-            const cleaned = cleanAddress(place.formatted_address || place.name);
-            document.getElementById(inputId).value = cleaned;
-            toggleClearBtn(inputId);
+                        const price = PricingEngine.calculatePrice(distanceKm, APP.state.config);
+                        APP.updatePrice(price);
 
-            window.APP.places[field] = place;
-            
-            // MOVE MAP TO SELECTION
-            window.APP.ignoreIdle = true; // Don't trigger reverse geocode on pan
-            window.APP.map.setCenter(place.geometry.location);
-            window.APP.map.setZoom(17);
-
-            // Re-trigger calculation
-            if (window.APP.places.origin && window.APP.places.dest) {
-                calculateRoute();
-            }
-        }
-
-        // --- GPS ---
-        window.getCurrentLocation = function() {
-            if (!navigator.geolocation) { alert("Browser tidak support GPS"); return; }
-            
-            const btn = document.getElementById('btn-gps');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = "<span>⏳</span>";
-
-            navigator.geolocation.getCurrentPosition(pos => {
-                const lat = pos.coords.latitude;
-                const lng = pos.coords.longitude;
-                const latlng = { lat, lng };
-
-                window.APP.ignoreIdle = false; // Allow reverse geocode to fill address
-                window.APP.map.panTo(latlng);
-                window.APP.map.setZoom(17);
-                btn.innerHTML = originalText;
-            }, () => {
-                alert("Gagal ambil lokasi GPS.");
-                btn.innerHTML = originalText;
-            });
-        };
-
-        // --- CALCULATION ---
-        function calculateRoute() {
-            const { origin, dest } = window.APP.places;
-            const originVal = document.getElementById('origin').value.trim();
-            const destVal = document.getElementById('destination').value.trim();
-
-            if (!origin || !dest || originVal === '' || destVal === '') {
-                window.APP.calc.price = 0;
-                document.getElementById('price-card').classList.remove('visible');
-                updateLink();
-                return;
-            }
-
-            // PERFORMANCE GUARD (Throttle 300ms)
-            const now = Date.now();
-            if (now - window.APP.calc.lastCalcTime < 300) return;
-            window.APP.calc.lastCalcTime = now;
-
-            setLoading(true);
-
-            const directionsService = new google.maps.DirectionsService();
-            
-            directionsService.route({
-                origin: origin.geometry.location || origin.geometry.location, 
-                destination: dest.geometry.location || dest.geometry.location,
-                travelMode: google.maps.TravelMode.TWO_WHEELER,
-                avoidTolls: true
-            }, (res, status) => {
-                setLoading(false);
-                if (status === 'OK') {
-                    const googleKm = res.routes[0].legs[0].distance.value / 1000;
-                    
-                    // PRICE LOOP FIX: Check distance delta
-                    if (Math.abs(googleKm - window.APP.calc.lastDistance) < 0.05) {
-                        return; // Ignore small changes
-                    }
-                    window.APP.calc.lastDistance = googleKm;
-
-                    const straightKm = google.maps.geometry.spherical.computeDistanceBetween(
-                        res.routes[0].legs[0].start_location,
-                        res.routes[0].legs[0].end_location
-                    ) / 1000;
-
-                    // PRICING LOGIC
-                    const configRide = window.APP.config.RIDE || { distance_logic: { lmf: 1.25, detour_limit: 1.15 } };
-                    const logic = configRide.distance_logic || { lmf: 1.25, detour_limit: 1.15 };
-                    
-                    let finalKm = googleKm;
-                    const motorEstimate = straightKm * logic.lmf;
-                    if (googleKm > motorEstimate * logic.detour_limit) finalKm = motorEstimate;
-                    else if (googleKm < straightKm * 1.05) finalKm = straightKm * 1.10;
-
-                    window.APP.calc.distance = parseFloat(finalKm.toFixed(2));
-                    
-                    if (window.APP.calc.distance > 25) {
-                        alert("Kejauhan Boss! Max 25km.");
-                        window.APP.calc.price = 0;
-                        updateLink();
+                        MapEngine.drawRoute(result);
+                        UIEngine.hideError();
                     } else {
-                        calculatePrice(finalKm);
+                        UIEngine.showError('Unable to calculate route. Please try different locations.');
+                        APP.state.route = null;
+                        APP.updateDistance(0);
+                        APP.updatePrice(0);
                     }
+                });
+            }
+        };
+
+        // ============================================================
+        // PRICING ENGINE - PURE CALCULATION
+        // ============================================================
+        const PricingEngine = {
+            calculatePrice(distanceKm, config) {
+                if (!config || !distanceKm) return 0;
+
+                let price = 0;
+                const serviceConfig = config[APP.state.service] || config.RIDE;
+
+                if (serviceConfig.type === 'LINEAR') {
+                    price = serviceConfig.base + (distanceKm * serviceConfig.perKm);
+                } else if (serviceConfig.type === 'TIERED') {
+                    if (distanceKm <= 2) {
+                        price = serviceConfig.base;
+                    } else {
+                        price = serviceConfig.base + ((distanceKm - 2) * serviceConfig.perKm);
+                    }
+                }
+
+                price = Math.max(0, Math.round(price / 1000) * 1000);
+                return isNaN(price) || !isFinite(price) ? 0 : price;
+            }
+        };
+
+        // ============================================================
+        // UI ENGINE - RENDERING ONLY
+        // ============================================================
+        const UIEngine = {
+            render(state) {
+                this.updatePriceCard(state);
+                this.updateButton(state);
+                this.updateStatusIndicator(state);
+                this.updateMarkers(state);
+            },
+
+            updatePriceCard(state) {
+                const card = document.getElementById('price-card');
+                const distanceBadge = document.getElementById('distance-badge');
+                const fakePrice = document.getElementById('fake-price');
+                const realPrice = document.getElementById('real-price');
+
+                if (state.distanceKm > 0 && state.price > 0) {
+                    distanceBadge.textContent = `${state.distanceKm} km`;
+                    const fake = Math.round(state.price * 1.3);
+                    fakePrice.textContent = `Rp ${fake.toLocaleString('id-ID')}`;
+                    realPrice.textContent = `Rp ${state.price.toLocaleString('id-ID')}`;
+                    card.classList.add('visible');
+                } else {
+                    card.classList.remove('visible');
+                }
+            },
+
+            updateButton(state) {
+                const button = document.getElementById('order-button');
+                const buttonText = document.getElementById('button-text');
+
+                if (!state.configLoaded) {
+                    button.disabled = true;
+                    buttonText.textContent = 'Loading config...';
+                } else if (!state.origin || !state.destination) {
+                    button.disabled = true;
+                    buttonText.textContent = 'Select locations to continue';
+                } else if (state.price === 0) {
+                    button.disabled = true;
+                    buttonText.textContent = 'Calculating price...';
+                } else {
+                    button.disabled = false;
+                    buttonText.textContent = `Order ${state.service} - Rp ${state.price.toLocaleString('id-ID')}`;
+                }
+            },
+
+            updateStatusIndicator(state) {
+                const status = document.getElementById('config-status');
+                if (state.configLoaded) {
+                    status.textContent = 'Ready';
+                } else {
+                    status.textContent = 'Loading...';
+                }
+            },
+
+            updateMarkers(state) {
+                if (state.origin) {
+                    MapEngine.setOriginMarker(state.origin);
+                }
+                if (state.destination) {
+                    MapEngine.setDestinationMarker(state.destination);
+                }
+            },
+
+            showError(message) {
+                const errorCard = document.getElementById('error-card');
+                const errorMessage = document.getElementById('error-message');
+                errorMessage.textContent = message;
+                errorCard.classList.add('visible');
+            },
+
+            hideError() {
+                const errorCard = document.getElementById('error-card');
+                errorCard.classList.remove('visible');
+            },
+
+            showLoading() {
+                document.getElementById('loading-overlay').classList.add('visible');
+            },
+
+            hideLoading() {
+                document.getElementById('loading-overlay').classList.remove('visible');
+            }
+        };
+
+        // ============================================================
+        // FIREBASE CONFIG LOADER
+        // ============================================================
+        const ConfigLoader = {
+            async loadConfig() {
+                try {
+                    const response = await fetch('https://firebasestorage.googleapis.com/v0/b/bantujeg.appspot.com/o/pricing_config.json?alt=media');
+                    const config = await response.json();
+                    APP.setConfig(config);
+                } catch (error) {
+                    console.error('Config load failed:', error);
+                    UIEngine.showError('Failed to load pricing config. Please refresh.');
+                }
+            }
+        };
+
+        // ============================================================
+        // AUTOCOMPLETE SETUP
+        // ============================================================
+        let originAutocomplete, destinationAutocomplete;
+
+        function setupAutocomplete() {
+            const originInput = document.getElementById('origin-input');
+            const destinationInput = document.getElementById('destination-input');
+
+            originAutocomplete = new google.maps.places.Autocomplete(originInput, {
+                componentRestrictions: { country: 'id' },
+                fields: ['geometry', 'formatted_address', 'name']
+            });
+
+            destinationAutocomplete = new google.maps.places.Autocomplete(destinationInput, {
+                componentRestrictions: { country: 'id' },
+                fields: ['geometry', 'formatted_address', 'name']
+            });
+
+            originAutocomplete.addListener('place_changed', () => {
+                const place = originAutocomplete.getPlace();
+                if (place.geometry) {
+                    APP.setOrigin(place.geometry.location);
+                }
+            });
+
+            destinationAutocomplete.addListener('place_changed', () => {
+                const place = destinationAutocomplete.getPlace();
+                if (place.geometry) {
+                    APP.setDestination(place.geometry.location);
                 }
             });
         }
 
-        function calculatePrice(distance) {
-            const service = window.APP.service;
-            const config = window.APP.config[service];
-            if (!config) return;
+        // ============================================================
+        // INPUT HANDLERS
+        // ============================================================
+        window.handleInput = function(field) {
+            const input = document.getElementById(`${field}-input`);
+            const clearBtn = document.getElementById(`clear-${field}`);
+            
+            if (input.value.trim().length > 0) {
+                clearBtn.classList.add('visible');
+            } else {
+                clearBtn.classList.remove('visible');
+            }
+        };
 
-            let price = 0;
-            const tiers = config.pricing_model?.tiers || config.TIERS; 
+        window.clearField = function(field) {
+            const input = document.getElementById(`${field}-input`);
+            input.value = '';
+            
+            const clearBtn = document.getElementById(`clear-${field}`);
+            clearBtn.classList.remove('visible');
 
-            if (Array.isArray(tiers)) {
-                 const tier = tiers.find(t => distance >= t.min_km && distance < t.max_km) || tiers[tiers.length-1];
-                 if (tier.calculation_type === 'FLAT') price = tier.base_price;
-                 else price = tier.base_price + ((distance - tier.offset_km) * tier.price_per_km);
-            } 
-            else if (tiers.BASE) {
-                const baseLimit = tiers.BASE.max_distance_km || 2;
-                if (distance <= baseLimit) price = tiers.BASE.delivery_fee;
-                else price = tiers.MID.base_fee + ((distance - baseLimit) * tiers.MID.price_per_km);
+            if (field === 'origin') {
+                APP.setOrigin(null);
+                if (MapEngine.originMarker) {
+                    MapEngine.originMarker.setMap(null);
+                    MapEngine.originMarker = null;
+                }
+            } else if (field === 'destination') {
+                APP.setDestination(null);
+                if (MapEngine.destinationMarker) {
+                    MapEngine.destinationMarker.setMap(null);
+                    MapEngine.destinationMarker = null;
+                }
             }
 
-            price = Math.ceil(price / 500) * 500;
-            window.APP.calc.price = price;
-            
-            // RENDER UI IMMEDIATE
-            const fakePrice = Math.ceil((price * 1.25) / 1000) * 1000;
-            document.getElementById('fake-price').innerText = `Rp ${fakePrice.toLocaleString('id-ID')}`;
-            document.getElementById('price-display').innerText = `Rp ${price.toLocaleString('id-ID')}`;
-            document.getElementById('dist-display').innerText = `${distance.toFixed(1)} km`;
-            document.getElementById('price-card').classList.add('visible'); // TASK 2: SHOW IMMEDIATELY
-            
-            updateLink();
-        }
+            MapEngine.clearRoute();
+            input.focus();
+        };
 
-        window.updateLink = function() {
-            const btn = document.getElementById('btn-submit');
-            const textBtn = document.getElementById('btn-text');
-            const price = window.APP.calc.price;
-            const originVal = document.getElementById('origin').value.trim();
-            const destVal = document.getElementById('destination').value.trim();
-
-            if (price === 0 || originVal === '' || destVal === '') {
-                btn.classList.add('disabled');
-                textBtn.innerText = "Isi Lokasi Dulu";
+        window.useGPS = function(field) {
+            if (!navigator.geolocation) {
+                UIEngine.showError('GPS not supported by your browser');
                 return;
             }
 
-            btn.classList.remove('disabled');
-            textBtn.innerText = `GAS ORDER • Rp ${price.toLocaleString('id-ID')}`;
+            UIEngine.showLoading();
 
-            const note = document.getElementById('note').value;
-            const items = document.getElementById('items').value;
-            const estPrice = document.getElementById('est-price').value;
-            
-            let serviceCode = 'OJK';
-            if (window.APP.service === 'FOOD_MART') serviceCode = 'JST';
-            if (window.APP.service === 'SEND') serviceCode = 'SND';
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const location = {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude
+                    };
 
-            const orderID = `${serviceCode}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
-
-            let msg = `Halo Kak! Order ${window.APP.service}\n` +
-                      `================\n` +
-                      `ID ORDER : ${orderID}\n` +
-                      `----------------\n` +
-                      `• Jemput : ${document.getElementById('origin').value}\n` +
-                      `• Tujuan : ${document.getElementById('destination').value}\n`;
-
-            if(note) msg += `• Catatan : ${note}\n`;
-            
-            if (window.APP.service === 'FOOD_MART') {
-                msg += `----------------\n` + 
-                       `• Item : ${items}\n` +
-                       `• Est. Harga Barang : Rp ${estPrice || 0}\n`;
-            }
-
-            msg += `----------------\n` +
-                   `• Jarak : ${window.APP.calc.distance} km\n` + 
-                   `• Ongkir : Rp ${price.toLocaleString('id-ID')}\n` +
-                   `================\n` +
-                   `Gas jemput?`;
-
-            btn.href = `https://wa.me/${CONFIG_WA}?text=${encodeURIComponent(msg)}`;
-
-            // Save History
-            if (window.APP.places.origin && window.APP.places.dest) {
-                localStorage.setItem('bantujeg_history', JSON.stringify({
-                    origin_addr: originVal,
-                    origin_loc: window.APP.places.origin.geometry.location,
-                    dest_addr: destVal,
-                    dest_loc: window.APP.places.dest.geometry.location,
-                    note: note
-                }));
-            }
+                    const geocoder = new google.maps.Geocoder();
+                    geocoder.geocode({ location }, (results, status) => {
+                        UIEngine.hideLoading();
+                        
+                        if (status === 'OK' && results[0]) {
+                            const input = document.getElementById(`${field}-input`);
+                            input.value = results[0].formatted_address;
+                            
+                            if (field === 'origin') {
+                                APP.setOrigin(new google.maps.LatLng(location.lat, location.lng));
+                            } else {
+                                APP.setDestination(new google.maps.LatLng(location.lat, location.lng));
+                            }
+                            
+                            handleInput(field);
+                        } else {
+                            UIEngine.showError('Unable to get address from GPS location');
+                        }
+                    });
+                },
+                (error) => {
+                    UIEngine.hideLoading();
+                    UIEngine.showError('GPS access denied. Please enable location services.');
+                }
+            );
         };
 
-        // --- UTILS ---
-        window.setService = function(type, el) {
-            window.APP.service = type;
-            
-            // Visual Tab Active
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            if(el) el.classList.add('active');
-            else document.querySelector('.tab').classList.add('active');
+        window.setService = function(type, element) {
+            APP.setService(type);
 
-            // === TAB ISOLATION (RESET EVERYTHING) ===
-            document.getElementById('origin').value = '';
-            document.getElementById('destination').value = '';
-            document.getElementById('note').value = '';
-            document.getElementById('items').value = '';
-            document.getElementById('est-price').value = '';
-            
-            // Reset State & Map
-            window.APP.places = { origin: null, dest: null };
-            window.APP.calc = { distance: 0, price: 0, lastDistance: 0 };
-            
-            // Reset UI Components
-            document.getElementById('price-card').classList.remove('visible');
-            toggleClearBtn('origin');
-            toggleClearBtn('destination');
-            toggleClearBtn('note');
-            
-            const jastipField = document.getElementById('jastip-field');
-            const legalWarning = document.getElementById('legal-warning');
-            const originInput = document.getElementById('origin');
-            const destInput = document.getElementById('destination');
-            const gpsBtn = document.getElementById('btn-gps');
-            const actionsOrigin = document.getElementById('actions-origin');
-            const actionsDest = document.getElementById('actions-destination');
-            
-            // Reset actions
-            // Logic: GPS button needs to be appended to the correct wrapper's action group
-            
-            // Hide Specifics
-            jastipField.style.display = 'none';
-            legalWarning.style.display = 'none';
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            if (element) element.classList.add('active');
 
-            if (type === 'FOOD_MART') {
-                jastipField.style.display = 'block';
-                activateField('destination');
-                
-                // MOVE GPS TO DESTINATION ACTIONS
-                actionsDest.prepend(gpsBtn);
+            document.getElementById('origin-input').value = '';
+            document.getElementById('destination-input').value = '';
+            document.getElementById('note-input').value = '';
+            
+            document.querySelectorAll('.clear-btn').forEach(btn => btn.classList.remove('visible'));
 
-                originInput.placeholder = "Beli di mana? (Nama Warung/Toko)";
-                destInput.placeholder = "Antar ke mana? (Lokasi Kamu)";
-            } else if (type === 'SEND') {
-                legalWarning.style.display = 'block';
-                activateField('origin');
-                
-                // MOVE GPS TO ORIGIN ACTIONS
-                actionsOrigin.prepend(gpsBtn);
-
-                originInput.placeholder = "Ambil paket di mana?";
-                destInput.placeholder = "Kirim ke mana?";
-            } else { // RIDE
-                activateField('origin');
-                
-                // MOVE GPS TO ORIGIN ACTIONS
-                actionsOrigin.prepend(gpsBtn);
-
-                originInput.placeholder = "Jemput di mana? (Cari Masjid/Sekolah)";
-                destInput.placeholder = "Antar ke mana?";
+            if (MapEngine.originMarker) {
+                MapEngine.originMarker.setMap(null);
+                MapEngine.originMarker = null;
             }
-            
-            // Force Button Reset
-            updateLink();
-        }
-
-        function setLoading(state) {
-            const spin = document.getElementById('loading-spin');
-            const txt = document.getElementById('btn-text');
-            if (state) {
-                spin.style.display = 'block';
-                txt.style.display = 'none';
-            } else {
-                spin.style.display = 'none';
-                txt.style.display = 'block';
+            if (MapEngine.destinationMarker) {
+                MapEngine.destinationMarker.setMap(null);
+                MapEngine.destinationMarker = null;
             }
-        }
+            MapEngine.clearRoute();
 
-        window.handleInput = function(id) {
-            toggleClearBtn(id);
-            if (document.getElementById(id).value.trim() === '') {
-                window.APP.calc.price = 0;
-                document.getElementById('price-card').classList.remove('visible');
-                updateLink();
-            }
+            const placeholders = {
+                RIDE: {
+                    origin: 'Pickup location',
+                    destination: 'Drop-off location'
+                },
+                SEND: {
+                    origin: 'Package pickup location',
+                    destination: 'Package delivery location'
+                },
+                FOOD: {
+                    origin: 'Restaurant location',
+                    destination: 'Delivery address'
+                }
+            };
+
+            document.getElementById('origin-input').placeholder = placeholders[type].origin;
+            document.getElementById('destination-input').placeholder = placeholders[type].destination;
         };
 
-        window.toggleClearBtn = function(id) {
-            const input = document.getElementById(id);
-            const btn = document.getElementById('clear-' + id);
-            if(input.value.length > 0) btn.classList.add('visible');
-            else btn.classList.remove('visible');
-        };
-
-        window.clearInput = function(id) {
-            // TASK 3: RESET BUTTON LOGIC
-            document.getElementById(id).value = '';
-            toggleClearBtn(id);
-            
-            const type = id === 'origin' ? 'origin' : (id === 'destination' ? 'dest' : null);
-            if(type) {
-                window.APP.places[type] = null;
-                window.APP.calc.price = 0;
-                document.getElementById('price-card').classList.remove('visible');
+        window.placeOrder = function() {
+            if (!APP.state.origin || !APP.state.destination || APP.state.price === 0) {
+                return;
             }
+
+            const originAddr = document.getElementById('origin-input').value;
+            const destAddr = document.getElementById('destination-input').value;
+            const note = document.getElementById('note-input').value;
+
+            const message = `*New ${APP.state.service} Order*
+
+📍 Pickup: ${originAddr}
+🎯 Destination: ${destAddr}
+📏 Distance: ${APP.state.distanceKm} km
+💰 Price: Rp ${APP.state.price.toLocaleString('id-ID')}
+${note ? `\n💬 Note: ${note}` : ''}
+
+Ready to serve!`;
+
+            const whatsappNumber = '6282110025455';
+            const whatsappURL = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
             
-            updateLink();
-            document.getElementById(id).focus();
+            window.open(whatsappURL, '_blank');
         };
 
-        function cleanAddress(addr) {
-            if(!addr) return "";
-            return addr.replace(/^[A-Z0-9\+]{4,8}(\+[A-Z0-9]{2,})?,\s*/, '');
-        }
-
-        window.addNote = function(text) {
-            const noteInput = document.getElementById('note');
-            if (noteInput.value.length > 0) {
-                noteInput.value += `, ${text}`;
-            } else {
-                noteInput.value = text;
-            }
-            updateLink();
-            toggleClearBtn('note');
+        // ============================================================
+        // INITIALIZATION
+        // ============================================================
+        window.initMap = function() {
+            MapEngine.init();
+            RouteEngine.init();
+            setupAutocomplete();
+            ConfigLoader.loadConfig();
         };
 
-        function checkHistory() {
-            const stored = localStorage.getItem('bantujeg_history');
-            if (stored) {
-                try {
-                    const data = JSON.parse(stored);
-                    if(data.origin_addr && data.dest_addr) {
-                        window.APP.historyData = data;
-                        document.getElementById('history-text').innerText = `🕒 ${cleanAddress(data.origin_addr)} → ${cleanAddress(data.dest_addr)}`;
-                        document.getElementById('history-chip').style.display = 'flex';
-                    }
-                } catch(e) {}
-            }
-        }
-
-        window.useHistory = function() {
-            const data = window.APP.historyData;
-            if(!data) return;
-            document.getElementById('history-chip').style.display = 'none';
-            document.getElementById('origin').value = data.origin_addr;
-            document.getElementById('destination').value = data.dest_addr;
-            if(data.note) document.getElementById('note').value = data.note;
-            
-            // Mock Geometry objects for calc
-            window.APP.places.origin = { geometry: { location: data.origin_loc } };
-            window.APP.places.dest = { geometry: { location: data.dest_loc } };
-            
-            calculateRoute();
-            
-            // Set Origin as active and pan
-            activateField('origin');
-            window.APP.map.setCenter(data.origin_loc);
-            window.APP.map.setZoom(15);
-        };
-
-        // --- INJECT SCRIPT DYNAMICALLY (FIX SCOPE ISSUE) ---
-        // This ensures initMap is defined BEFORE Maps API loads
+        // Load Google Maps API
         const script = document.createElement('script');
-        script.src = "https://maps.googleapis.com/maps/api/js?key=AIzaSyAXo3ErccnWYzKPXZsli1j9zsE5_50hO1g&libraries=places,geometry&callback=initMap";
+        script.src = 'https://maps.googleapis.com/maps/api/js?key=AIzaSyAXo3ErccnWYzKPXZsli1j9zsE5_50hO1g&libraries=places,geometry&callback=initMap';
         script.async = true;
         script.defer = true;
         document.body.appendChild(script);
-
     </script>
 </body>
 </html>
