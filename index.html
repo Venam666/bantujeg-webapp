@@ -98,6 +98,10 @@
             overflow: hidden;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
             transition: height 0.3s ease;
+            /* Hardware acceleration for smooth rendering */
+            transform: translateZ(0);
+            backface-visibility: hidden;
+            will-change: height;
         }
 
         #map-container.expanded {
@@ -107,6 +111,9 @@
         #map {
             width: 100%;
             height: 100%;
+            /* Hardware acceleration */
+            transform: translateZ(0);
+            backface-visibility: hidden;
         }
 
         .card-interface {
@@ -444,6 +451,9 @@
             background: white;
             display: none;
             flex-direction: column;
+            /* Hardware acceleration for smooth modal */
+            transform: translateZ(0);
+            backface-visibility: hidden;
         }
 
         #map-picker-modal.active {
@@ -493,6 +503,9 @@
         #picker-map {
             width: 100%;
             height: 100%;
+            /* Hardware acceleration for smooth picker map */
+            transform: translateZ(0);
+            backface-visibility: hidden;
         }
 
         .center-pin {
@@ -782,13 +795,17 @@
                 zoomControl: false,
                 mapTypeControl: false,
                 streetViewControl: false,
-                fullscreenControl: false
+                fullscreenControl: false,
+                // Performance optimizations
+                mapTypeId: 'roadmap',
+                styles: [],
+                renderingType: 'VECTOR' // Use vector rendering for smoother performance
             });
 
             // Initialize DirectionsRenderer for visual route
             window.APP.directionsRenderer = new google.maps.DirectionsRenderer({
                 suppressMarkers: true,
-                preserveViewport: false,
+                preserveViewport: true,  // CRITICAL: prevent viewport jump
                 polylineOptions: {
                     strokeColor: "#4285F4",
                     strokeWeight: 5,
@@ -910,33 +927,43 @@
                 ? 'https://cdn-icons-png.flaticon.com/512/684/684908.png'
                 : 'https://cdn-icons-png.flaticon.com/512/684/684913.png';
 
-            if (markers[type]) markers[type].setMap(null);
+            const newPos = { lat: lat, lng: lng };
 
-            markers[type] = new google.maps.Marker({
-                position: { lat: lat, lng: lng },
-                map: map,
-                icon: {
-                    url: iconUrl,
-                    scaledSize: new google.maps.Size(40, 40)
-                },
-                label: {
-                    text: type === 'origin' ? "Jemput" : "Tujuan",
-                    color: "black",
-                    fontWeight: "bold",
-                    fontSize: "12px",
-                    className: "map-tooltip"
-                }
-            });
-
-            if (markers.origin && markers.dest) {
-                const bounds = new google.maps.LatLngBounds();
-                bounds.extend(markers.origin.getPosition());
-                bounds.extend(markers.dest.getPosition());
-                map.fitBounds(bounds, 50);
+            // REUSE MARKER - don't recreate to prevent jitter
+            if (markers[type]) {
+                markers[type].setPosition(newPos);
             } else {
-                map.setCenter({ lat: lat, lng: lng });
-                map.setZoom(16);
+                markers[type] = new google.maps.Marker({
+                    position: newPos,
+                    map: map,
+                    icon: {
+                        url: iconUrl,
+                        scaledSize: new google.maps.Size(40, 40)
+                    },
+                    label: {
+                        text: type === 'origin' ? "Jemput" : "Tujuan",
+                        color: "black",
+                        fontWeight: "bold",
+                        fontSize: "12px",
+                        className: "map-tooltip"
+                    },
+                    animation: google.maps.Animation.DROP
+                });
             }
+
+            // Smooth bounds update with debounce
+            if (window.APP.boundsTimer) clearTimeout(window.APP.boundsTimer);
+            window.APP.boundsTimer = setTimeout(() => {
+                if (markers.origin && markers.dest) {
+                    const bounds = new google.maps.LatLngBounds();
+                    bounds.extend(markers.origin.getPosition());
+                    bounds.extend(markers.dest.getPosition());
+                    map.fitBounds(bounds, 50);
+                } else {
+                    map.panTo(newPos);
+                    if (map.getZoom() < 16) map.setZoom(16);
+                }
+            }, 100);
         }
 
         window.getCurrentLocation = function (inputType) {
@@ -1021,57 +1048,62 @@
         }
 
         function calculateRoute() {
-            const { origin, dest } = window.APP.places;
-            const originVal = document.getElementById('origin').value.trim();
-            const destVal = document.getElementById('destination').value.trim();
+            // Debounce to prevent rapid recalculation
+            if (window.APP.routeTimer) clearTimeout(window.APP.routeTimer);
+            
+            window.APP.routeTimer = setTimeout(() => {
+                const { origin, dest } = window.APP.places;
+                const originVal = document.getElementById('origin').value.trim();
+                const destVal = document.getElementById('destination').value.trim();
 
-            if (!origin || !dest || originVal === '' || destVal === '') {
-                window.APP.calc.price = 0;
-                updateLink();
-                return;
-            }
-
-            setLoading(true);
-            document.getElementById('error-card').style.display = 'none';
-
-            const directionsService = new google.maps.DirectionsService();
-            directionsService.route({
-                origin: origin.geometry.location,
-                destination: dest.geometry.location,
-                travelMode: google.maps.TravelMode.TWO_WHEELER,
-                avoidTolls: true
-            }, (res, status) => {
-                setLoading(false);
-                if (status === 'OK') {
-                    // DISPLAY VISUAL ROUTE (BLUE LINE)
-                    window.APP.directionsRenderer.setDirections(res);
-
-                    const googleKm = res.routes[0].legs[0].distance.value / 1000;
-
-                    const straightKm = google.maps.geometry.spherical.computeDistanceBetween(
-                        res.routes[0].legs[0].start_location,
-                        res.routes[0].legs[0].end_location
-                    ) / 1000;
-
-                    const configRide = window.APP.config.RIDE || {};
-                    const logic = configRide.distance_logic || { lmf: 1.25, detour_limit: 1.15 };
-
-                    let finalKm = googleKm;
-                    const motorEstimate = straightKm * logic.lmf;
-                    if (googleKm > motorEstimate * logic.detour_limit) finalKm = motorEstimate;
-                    else if (googleKm < straightKm * 1.05) finalKm = straightKm * 1.10;
-
-                    window.APP.calc.distance = parseFloat(finalKm.toFixed(2));
-
-                    if (window.APP.calc.distance > 25) {
-                        showError("Kejauhan Boss! Max 25km ya.");
-                    } else {
-                        calculatePrice(finalKm);
-                    }
-                } else {
-                    console.error("Directions Failed:", status);
+                if (!origin || !dest || originVal === '' || destVal === '') {
+                    window.APP.calc.price = 0;
+                    updateLink();
+                    return;
                 }
-            });
+
+                setLoading(true);
+                document.getElementById('error-card').style.display = 'none';
+
+                const directionsService = new google.maps.DirectionsService();
+                directionsService.route({
+                    origin: origin.geometry.location,
+                    destination: dest.geometry.location,
+                    travelMode: google.maps.TravelMode.TWO_WHEELER,
+                    avoidTolls: true
+                }, (res, status) => {
+                    setLoading(false);
+                    if (status === 'OK') {
+                        // DISPLAY VISUAL ROUTE (BLUE LINE)
+                        window.APP.directionsRenderer.setDirections(res);
+
+                        const googleKm = res.routes[0].legs[0].distance.value / 1000;
+
+                        const straightKm = google.maps.geometry.spherical.computeDistanceBetween(
+                            res.routes[0].legs[0].start_location,
+                            res.routes[0].legs[0].end_location
+                        ) / 1000;
+
+                        const configRide = window.APP.config.RIDE || {};
+                        const logic = configRide.distance_logic || { lmf: 1.25, detour_limit: 1.15 };
+
+                        let finalKm = googleKm;
+                        const motorEstimate = straightKm * logic.lmf;
+                        if (googleKm > motorEstimate * logic.detour_limit) finalKm = motorEstimate;
+                        else if (googleKm < straightKm * 1.05) finalKm = straightKm * 1.10;
+
+                        window.APP.calc.distance = parseFloat(finalKm.toFixed(2));
+
+                        if (window.APP.calc.distance > 25) {
+                            showError("Kejauhan Boss! Max 25km ya.");
+                        } else {
+                            calculatePrice(finalKm);
+                        }
+                    } else {
+                        console.error("Directions Failed:", status);
+                    }
+                });
+            }, 200); // 200ms debounce
         }
 
         function showError(msg) {
@@ -1302,16 +1334,22 @@
                     zoomControl: true,
                     mapTypeControl: false,
                     streetViewControl: false,
-                    fullscreenControl: false
+                    fullscreenControl: false,
+                    // Performance optimizations
+                    mapTypeId: 'roadmap',
+                    styles: [],
+                    renderingType: 'VECTOR'
                 });
 
                 window.APP.pickerMap.addListener('idle', handlePickerMapIdle);
             }
 
-            // FIX JITTER: Wait for modal animation to complete (300ms)
+            // OPTIMIZED: Wait for modal animation, then single resize
             setTimeout(() => {
-                // Force map resize
-                google.maps.event.trigger(window.APP.pickerMap, "resize");
+                // Single resize trigger
+                if (window.APP.pickerMap) {
+                    google.maps.event.trigger(window.APP.pickerMap, "resize");
+                }
 
                 let targetCenter;
                 const existingPlace = window.APP.places[type === 'origin' ? 'origin' : 'dest'];
@@ -1321,7 +1359,7 @@
                     const lng = existingPlace.geometry.location.lng();
                     targetCenter = { lat, lng };
                     window.APP.picker.currentLocation = { lat, lng };
-                    window.APP.pickerMap.setCenter(targetCenter);
+                    window.APP.pickerMap.panTo(targetCenter);
                     window.APP.pickerMap.setZoom(18);
                     performReverseGeocode(lat, lng);
                 } else if (navigator.geolocation) {
@@ -1329,14 +1367,14 @@
                         (position) => {
                             const lat = position.coords.latitude;
                             const lng = position.coords.longitude;
-                            window.APP.pickerMap.setCenter({ lat, lng });
+                            window.APP.pickerMap.panTo({ lat, lng });
                             window.APP.pickerMap.setZoom(18);
                             window.APP.picker.currentLocation = { lat, lng };
                             performReverseGeocode(lat, lng);
                         },
                         () => {
                             const centerSalatiga = { lat: -7.3305, lng: 110.5084 };
-                            window.APP.pickerMap.setCenter(centerSalatiga);
+                            window.APP.pickerMap.panTo(centerSalatiga);
                             window.APP.pickerMap.setZoom(17);
                             window.APP.picker.currentLocation = centerSalatiga;
                             performReverseGeocode(centerSalatiga.lat, centerSalatiga.lng);
@@ -1344,7 +1382,7 @@
                     );
                 } else {
                     const centerSalatiga = { lat: -7.3305, lng: 110.5084 };
-                    window.APP.pickerMap.setCenter(centerSalatiga);
+                    window.APP.pickerMap.panTo(centerSalatiga);
                     window.APP.pickerMap.setZoom(17);
                     window.APP.picker.currentLocation = centerSalatiga;
                     performReverseGeocode(centerSalatiga.lat, centerSalatiga.lng);
