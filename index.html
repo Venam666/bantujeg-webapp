@@ -891,7 +891,12 @@
             if (val.trim() === '') {
                 if (id === 'origin' || id === 'destination') {
                     const type = id === 'origin' ? 'origin' : 'dest';
+                    const field = id === 'origin' ? 'pickup' : 'dropoff';
+
+                    // Full state reset on empty (same as clearInput)
                     window.APP.places[type] = null;
+                    window.locationState[field] = { lat: null, lng: null, source: null, address: '' };
+
                     if (window.APP.markers[type]) {
                         window.APP.markers[type].setMap(null);
                         window.APP.markers[type] = null;
@@ -910,6 +915,7 @@
             else btn.style.display = 'none';
         }
 
+        // 🧹 AUTHORITATIVE CLEAR - Full state reset, no ghost memory
         window.clearInput = function (id) {
             const input = document.getElementById(id);
             input.value = '';
@@ -917,14 +923,29 @@
 
             if (id === 'origin' || id === 'destination') {
                 const type = id === 'origin' ? 'origin' : 'dest';
+                const field = id === 'origin' ? 'pickup' : 'dropoff';
+
+                // Rule 8: TRUE CLEAR = FULL STATE RESET
+                // 1. Clear legacy state
                 window.APP.places[type] = null;
+
+                // 2. Clear central location state (CRITICAL)
+                window.locationState[field] = { lat: null, lng: null, source: null, address: '' };
+
+                // 3. Remove marker
                 if (window.APP.markers[type]) {
                     window.APP.markers[type].setMap(null);
                     window.APP.markers[type] = null;
                 }
+
+                // 4. Reset price and hide cards
                 window.APP.calc.price = 0;
                 document.getElementById('price-card').style.display = 'none';
                 document.getElementById('error-card').style.display = 'none';
+
+                // 5. Clear any pending geocode
+                window.APP.picker.geocodeRequest = null;
+
                 updateLink();
             }
         }
