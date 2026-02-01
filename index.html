@@ -536,7 +536,9 @@
             font-size: 0.85rem;
             color: var(--dark);
             font-weight: 500;
-            min-height: 44px;
+            min-height: 48px;
+            height: 48px;
+            overflow: hidden;
             line-height: 1.4;
         }
 
@@ -1305,7 +1307,8 @@
                     fullscreenControl: false
                 });
 
-                window.APP.pickerMap.addListener('idle', handlePickerMapIdle);
+                // DISABLED: Live geocoding causes DOM reflow loop and map jitter
+                // window.APP.pickerMap.addListener('idle', handlePickerMapIdle);
             }
 
             // FIX JITTER: Wait for modal animation to complete (300ms)
@@ -1323,7 +1326,7 @@
                     window.APP.picker.currentLocation = { lat, lng };
                     window.APP.pickerMap.setCenter(targetCenter);
                     window.APP.pickerMap.setZoom(18);
-                    performReverseGeocode(lat, lng);
+                    // Don't geocode on open - prevents jitter
                 } else if (navigator.geolocation) {
                     navigator.geolocation.getCurrentPosition(
                         (position) => {
@@ -1332,14 +1335,14 @@
                             window.APP.pickerMap.setCenter({ lat, lng });
                             window.APP.pickerMap.setZoom(18);
                             window.APP.picker.currentLocation = { lat, lng };
-                            performReverseGeocode(lat, lng);
+                            // Don't geocode on open - prevents jitter
                         },
                         () => {
                             const centerSalatiga = { lat: -7.3305, lng: 110.5084 };
                             window.APP.pickerMap.setCenter(centerSalatiga);
                             window.APP.pickerMap.setZoom(17);
                             window.APP.picker.currentLocation = centerSalatiga;
-                            performReverseGeocode(centerSalatiga.lat, centerSalatiga.lng);
+                            // Don't geocode on open - prevents jitter
                         }
                     );
                 } else {
@@ -1347,7 +1350,7 @@
                     window.APP.pickerMap.setCenter(centerSalatiga);
                     window.APP.pickerMap.setZoom(17);
                     window.APP.picker.currentLocation = centerSalatiga;
-                    performReverseGeocode(centerSalatiga.lat, centerSalatiga.lng);
+                    // Don't geocode on open - prevents jitter
                 }
             }, 300);
 
@@ -1368,29 +1371,30 @@
             }
         }
 
+        // DISABLED: This function caused DOM reflow loop and map jitter
+        // Live geocoding during drag triggers layout recalculation
         function handlePickerMapIdle() {
             const center = window.APP.pickerMap.getCenter();
             const lat = center.lat();
             const lng = center.lng();
 
+            // Only update coordinates, DO NOT update text (prevents jitter)
             window.APP.picker.currentLocation = { lat, lng };
 
-            if (window.APP.picker.geocodeTimer) {
-                clearTimeout(window.APP.picker.geocodeTimer);
-            }
-
-            window.APP.picker.geocodeTimer = setTimeout(() => {
-                performReverseGeocode(lat, lng);
-            }, 500);
+            // DISABLED: No live geocoding
+            // if (window.APP.picker.geocodeTimer) {
+            //     clearTimeout(window.APP.picker.geocodeTimer);
+            // }
+            // window.APP.picker.geocodeTimer = setTimeout(() => {
+            //     performReverseGeocode(lat, lng);
+            // }, 500);
         }
 
-        function performReverseGeocode(lat, lng) {
+        // Geocode ONLY on button press - not during drag
+        function performReverseGeocode(lat, lng, callback) {
             if (window.APP.picker.geocodeRequest) {
                 window.APP.picker.geocodeRequest = null;
             }
-
-            const addressDisplay = document.getElementById('picker-address');
-            addressDisplay.innerText = 'Mencari alamat...';
 
             const geocoder = new google.maps.Geocoder();
             const requestId = Date.now();
@@ -1403,11 +1407,9 @@
 
                 if (status === "OK" && results[0]) {
                     const address = cleanAddress(results[0].formatted_address);
-                    addressDisplay.innerText = address;
-                    document.getElementById('confirm-btn').disabled = false;
+                    if (callback) callback(address);
                 } else {
-                    addressDisplay.innerText = 'Gagal mendapatkan alamat. Coba geser peta lagi.';
-                    document.getElementById('confirm-btn').disabled = true;
+                    if (callback) callback(null);
                 }
             });
         }
@@ -1417,28 +1419,42 @@
             if (!type || !window.APP.picker.currentLocation) return;
 
             const { lat, lng } = window.APP.picker.currentLocation;
-            const address = document.getElementById('picker-address').innerText;
 
-            const inputId = type === 'origin' ? 'origin' : 'destination';
-            document.getElementById(inputId).value = address;
-            toggleClearBtn(inputId);
+            // Disable button and show loading
+            const confirmBtn = document.getElementById('confirm-btn');
+            const addressDisplay = document.getElementById('picker-address');
+            confirmBtn.disabled = true;
+            addressDisplay.innerText = 'Mencari alamat...';
 
-            const placeType = type === 'origin' ? 'origin' : 'dest';
-            window.APP.places[placeType] = {
-                geometry: {
-                    location: new google.maps.LatLng(lat, lng)
-                },
-                formatted_address: address
-            };
+            // Geocode ONLY on confirm button press
+            performReverseGeocode(lat, lng, (address) => {
+                if (!address) {
+                    addressDisplay.innerText = 'Gagal mendapatkan alamat. Coba lagi.';
+                    confirmBtn.disabled = false;
+                    return;
+                }
 
-            updateMarker(placeType, lat, lng);
-            expandMap();
+                const inputId = type === 'origin' ? 'origin' : 'destination';
+                document.getElementById(inputId).value = address;
+                toggleClearBtn(inputId);
 
-            if (window.APP.places.origin && window.APP.places.dest) {
-                calculateRoute();
-            }
+                const placeType = type === 'origin' ? 'origin' : 'dest';
+                window.APP.places[placeType] = {
+                    geometry: {
+                        location: new google.maps.LatLng(lat, lng)
+                    },
+                    formatted_address: address
+                };
 
-            closeMapPicker();
+                updateMarker(placeType, lat, lng);
+                expandMap();
+
+                if (window.APP.places.origin && window.APP.places.dest) {
+                    calculateRoute();
+                }
+
+                closeMapPicker();
+            });
         }
 
         window.addEventListener('popstate', function (event) {
