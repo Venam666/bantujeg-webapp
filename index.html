@@ -78,15 +78,22 @@
         .map-moving .center-pin { transform: translate(-50%, -120%) scale(1.1); opacity: 0.9; }
         .map-moving .pin-shadow { transform: scale(0.8); opacity: 0.5; }
 
-        /* FLOATING GPS BUTTON */
+        /* FLOATING GPS BUTTON - FIXED Z-INDEX & POSITION */
         .floating-gps {
-            position: absolute; bottom: 30px; right: 20px;
+            position: absolute; bottom: 180px; right: 20px; /* Elevated to avoid card overlap */
             background: white; padding: 12px; border-radius: 50%;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15); cursor: pointer;
-            z-index: 5; font-size: 1.4rem; display: flex; align-items: center; justify-content: center;
+            z-index: 999; font-size: 1.4rem; display: flex; align-items: center; justify-content: center;
             transition: transform 0.2s;
+            animation: gpsPulse 3s infinite;
         }
         .floating-gps:active { transform: scale(0.9); }
+        
+        @keyframes gpsPulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(255, 255, 255, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+        }
 
         /* --- INPUT CARD (BOTTOM HALF) --- */
         .card-interface {
@@ -99,6 +106,12 @@
             z-index: 20;
             box-shadow: 0 -4px 20px rgba(0,0,0,0.05);
             overflow-y: auto;
+            animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
         }
 
         /* HEADER INSIDE CARD */
@@ -194,9 +207,34 @@
             background: var(--primary); color: white; padding: 16px; border-radius: 16px;
             font-weight: 700; font-size: 1.1rem; text-decoration: none;
             transition: transform 0.2s; box-shadow: 0 10px 20px rgba(16, 185, 129, 0.3);
+            overflow: hidden;
+            position: relative;
         }
         .btn-cta:active { transform: scale(0.98); }
         .btn-cta.disabled { background: #cbd5e1; box-shadow: none; pointer-events: none; }
+        
+        /* Ripple Effect */
+        .btn-cta::after {
+            content: "";
+            background: rgba(255, 255, 255, 0.3);
+            display: block;
+            position: absolute;
+            border-radius: 50%;
+            padding-top: 240%;
+            padding-left: 240%;
+            margin-top: -120%;
+            margin-left: -120%;
+            opacity: 0;
+            transition: all 0.8s;
+        }
+        .btn-cta:active::after {
+            padding-top: 0;
+            padding-left: 0;
+            margin-top: 0;
+            margin-left: 0;
+            opacity: 1;
+            transition: 0s;
+        }
 
         .spinner { border: 3px solid rgba(255,255,255,0.3); border-radius: 50%; border-top: 3px solid white; width: 20px; height: 20px; animation: spin 1s linear infinite; display: none; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -333,18 +371,29 @@
         </a>
     </div>
 
-    <!-- Google Maps API (Use the exact key provided) -->
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAXo3ErccnWYzKPXZsli1j9zsE5_50hO1g&libraries=places,geometry&loading=async"></script>
+    <!-- Import Maps for Modules -->
+    <script type="importmap">
+      {
+        "imports": {
+          "firebase/app": "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js",
+          "firebase/firestore": "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js",
+          "firebase/auth": "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js",
+          "@google/generative-ai": "https://esm.run/@google/generative-ai"
+        }
+      }
+    </script>
 
-    <!-- App Logic -->
+    <!-- MAIN LOGIC (TYPE MODULE) -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
+        import { initializeApp } from "firebase/app";
+        import { getFirestore, doc, getDoc } from "firebase/firestore";
+        import { GoogleGenerativeAI } from "@google/generative-ai";
 
         // CONFIG
         const CONFIG_WA = "62895330091464";
         const SALATIGA_CENTER = { lat: -7.3305, lng: 110.5084 };
+        const MAPS_API_KEY = "AIzaSyAXo3ErccnWYzKPXZsli1j9zsE5_50hO1g"; // MAPS Key
+        const GEMINI_API_KEY = "AIzaSyDDcAVxAk_jY05_VRlJ8KjNPusFyEw714s"; // GEMINI Key
         
         // APP STATE
         window.APP = {
@@ -356,10 +405,11 @@
             map: null,
             geocoder: null,
             historyData: null,
-            ignoreIdle: false // Flag to prevent circular updates
+            ignoreIdle: false, // Flag to prevent circular updates
+            debounceTimer: null
         };
 
-        // FIREBASE INIT (Using Previous Config to ensure backend works)
+        // FIREBASE INIT
         const firebaseConfig = {
             apiKey: "AIzaSyAekghf6Oydh17aYc_ia1zy3oNDsFK4aww",
             authDomain: "tanganbantu-poc.firebaseapp.com",
@@ -372,9 +422,14 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // GEMINI INIT (Using the requested key)
-        const genAI = new GoogleGenerativeAI("AIzaSyDDcAVxAk_jY05_VRlJ8KjNPusFyEw714s");
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        // GEMINI INIT
+        let model;
+        try {
+            const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+            model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        } catch(e) {
+            console.error("Gemini Init Error:", e);
+        }
 
         // LOAD PRICING
         async function loadConfigs() {
@@ -387,17 +442,23 @@
                 if (rideSnap.exists()) window.APP.config.RIDE = rideSnap.data();
                 if (foodSnap.exists()) window.APP.config.FOOD_MART = foodSnap.data();
                 if (sendSnap.exists()) window.APP.config.SEND = sendSnap.data();
+                console.log("Config Loaded");
             } catch (e) { console.error("Config Error", e); }
         }
         loadConfigs();
 
-        // EXPOSE GEMINI FUNCTIONS TO WINDOW
+        // ------------------------------------------
+        // EXPOSE FUNCTIONS TO WINDOW (GLOBAL SCOPE)
+        // ------------------------------------------
+
+        // --- GEMINI FUNCTIONS ---
         window.refineNoteWithAI = async function() {
             const input = document.getElementById('note');
             const originalText = input.value.trim();
             const btn = document.getElementById('ai-note-btn');
             
             if (!originalText) { alert("Isi catatannya dulu ya kak."); return; }
+            if (!model) { alert("AI belum siap, cek koneksi."); return; }
 
             const originalBtnText = btn.innerHTML;
             btn.innerHTML = "<span>⏳</span>...";
@@ -410,7 +471,7 @@
                 input.value = response.trim();
                 updateLink();
             } catch (e) {
-                console.error(e);
+                console.error("AI Error:", e);
                 alert("AI lagi sibuk, coba nanti ya.");
             } finally {
                 btn.innerHTML = originalBtnText;
@@ -424,6 +485,7 @@
             const btn = document.getElementById('ai-order-btn');
 
             if (!originalText) { alert("Isi list belanjaan dulu ya kak."); return; }
+            if (!model) { alert("AI belum siap."); return; }
 
             const originalBtnText = btn.innerHTML;
             btn.innerHTML = "<span>⏳</span>...";
@@ -436,25 +498,20 @@
                 input.value = response.trim();
                 updateLink();
             } catch (e) {
-                console.error(e);
+                console.error("AI Error:", e);
                 alert("AI lagi sibuk, coba nanti ya.");
             } finally {
                 btn.innerHTML = originalBtnText;
                 btn.disabled = false;
             }
         };
-    </script>
 
-    <script>
-        const CONFIG_WA = "62895330091464"; 
-
-        // --- MAP FUNCTIONS ---
-
-        function initMap() {
+        // --- MAP INITIALIZATION ---
+        window.initMap = function() {
             window.APP.geocoder = new google.maps.Geocoder();
             
             const mapOptions = {
-                center: { lat: -7.3305, lng: 110.5084 }, // Salatiga
+                center: SALATIGA_CENTER,
                 zoom: 16,
                 disableDefaultUI: true, // Clean UI
                 zoomControl: false,
@@ -496,7 +553,7 @@
 
             initAutocomplete();
             checkHistory();
-        }
+        };
 
         // --- REVERSE GEOCODING ---
         function reverseGeocode(lat, lng) {
@@ -509,7 +566,9 @@
                     const inputEl = document.getElementById(active === 'origin' ? 'origin' : 'destination');
                     
                     // Update value logic
-                    inputEl.value = cleanedAddress;
+                    if(document.activeElement !== inputEl) { // Only update if user is NOT typing
+                        inputEl.value = cleanedAddress;
+                    }
                     toggleClearBtn(active === 'origin' ? 'origin' : 'destination');
 
                     // Update State
@@ -546,7 +605,17 @@
 
         // --- AUTOCOMPLETE ---
         function initAutocomplete() {
+            // Bias to map center
+            const center = window.APP.map.getCenter();
+            const defaultBounds = {
+                north: center.lat() + 0.1,
+                south: center.lat() - 0.1,
+                east: center.lng() + 0.1,
+                west: center.lng() - 0.1,
+            };
+
             const options = {
+                bounds: defaultBounds,
                 componentRestrictions: { country: "id" },
                 fields: ["geometry", "name", "formatted_address"],
                 strictBounds: false,
@@ -554,6 +623,10 @@
 
             const acOrigin = new google.maps.places.Autocomplete(document.getElementById('origin'), options);
             const acDest = new google.maps.places.Autocomplete(document.getElementById('destination'), options);
+
+            // Bind to map bounds
+            acOrigin.bindTo("bounds", window.APP.map);
+            acDest.bindTo("bounds", window.APP.map);
 
             acOrigin.addListener('place_changed', () => handlePlaceSelect('origin', acOrigin));
             acDest.addListener('place_changed', () => handlePlaceSelect('destination', acDest));
@@ -596,7 +669,7 @@
             }, () => {
                 alert("Gagal ambil lokasi GPS.");
             });
-        }
+        };
 
         // --- CALCULATION ---
         function calculateRoute() {
@@ -683,7 +756,7 @@
             updateLink();
         }
 
-        function updateLink() {
+        window.updateLink = function() {
             const btn = document.getElementById('btn-submit');
             const textBtn = document.getElementById('btn-text');
             const price = window.APP.calc.price;
@@ -733,14 +806,16 @@
             btn.href = `https://wa.me/${CONFIG_WA}?text=${encodeURIComponent(msg)}`;
 
             // Save History
-            localStorage.setItem('bantujeg_history', JSON.stringify({
-                origin_addr: originVal,
-                origin_loc: window.APP.places.origin.geometry.location,
-                dest_addr: destVal,
-                dest_loc: window.APP.places.dest.geometry.location,
-                note: note
-            }));
-        }
+            if (window.APP.places.origin && window.APP.places.dest) {
+                localStorage.setItem('bantujeg_history', JSON.stringify({
+                    origin_addr: originVal,
+                    origin_loc: window.APP.places.origin.geometry.location,
+                    dest_addr: destVal,
+                    dest_loc: window.APP.places.dest.geometry.location,
+                    note: note
+                }));
+            }
+        };
 
         // --- UTILS ---
         window.setService = function(type, el) {
@@ -795,7 +870,7 @@
             
             // Force Button Reset
             updateLink();
-        }
+        };
 
         function setLoading(state) {
             const spin = document.getElementById('loading-spin');
@@ -816,21 +891,21 @@
                 document.getElementById('price-card').style.display = 'none';
                 updateLink();
             }
-        }
+        };
 
         window.toggleClearBtn = function(id) {
             const input = document.getElementById(id);
             const btn = document.getElementById('clear-' + id);
             if(input.value.length > 0) btn.style.display = 'flex';
             else btn.style.display = 'none';
-        }
+        };
 
         window.clearInput = function(id) {
             document.getElementById(id).value = '';
             toggleClearBtn(id);
             handleInput(id);
             document.getElementById(id).focus();
-        }
+        };
 
         function cleanAddress(addr) {
             if(!addr) return "";
@@ -846,7 +921,7 @@
             }
             updateLink();
             toggleClearBtn('note');
-        }
+        };
 
         function checkHistory() {
             const stored = localStorage.getItem('bantujeg_history');
@@ -880,9 +955,16 @@
             activateField('origin');
             window.APP.map.setCenter(data.origin_loc);
             window.APP.map.setZoom(15);
-        }
+        };
 
-        window.initMap = initMap;
+        // --- INJECT SCRIPT DYNAMICALLY (FIX SCOPE ISSUE) ---
+        // This ensures initMap is defined BEFORE Maps API loads
+        const script = document.createElement('script');
+        script.src = "https://maps.googleapis.com/maps/api/js?key=AIzaSyAXo3ErccnWYzKPXZsli1j9zsE5_50hO1g&libraries=places,geometry&callback=initMap";
+        script.async = true;
+        script.defer = true;
+        document.body.appendChild(script);
+
     </script>
 </body>
 </html>
