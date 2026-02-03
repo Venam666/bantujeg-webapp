@@ -117,30 +117,37 @@
 
         .tabs {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 8px;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 6px;
             margin-bottom: 24px;
             background: var(--gray);
             padding: 4px;
             border-radius: 16px;
             border: 1px solid var(--border);
             touch-action: pan-y;
+            overflow: hidden;
+            width: 100%;
+            box-sizing: border-box;
         }
 
         .tab {
-            padding: 12px 8px;
+            padding: 10px 4px;
             text-align: center;
             border-radius: 12px;
             font-weight: 700;
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             color: #64748B;
             cursor: pointer;
             transition: all 0.2s;
             word-break: break-word;
-            min-height: 44px;
+            min-height: 40px;
             display: flex;
             align-items: center;
             justify-content: center;
+            overflow: hidden;
+            white-space: normal;
+            line-height: 1.2;
+            box-sizing: border-box;
         }
 
         .tab.active {
@@ -148,6 +155,19 @@
             color: white;
             box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
             transform: scale(1.02);
+            max-width: 100%;
+        }
+
+        @media (max-width: 360px) {
+            .tab {
+                font-size: 0.75rem;
+                padding: 8px 2px;
+                min-height: 36px;
+            }
+
+            .tabs {
+                gap: 4px;
+            }
         }
 
         .input-group {
@@ -1270,6 +1290,15 @@
                     // DISPLAY VISUAL ROUTE (BLUE LINE)
                     window.APP.directionsRenderer.setDirections(res);
 
+                    // 🗺️ FIX: Fit map to route bounds with padding (ensure complete route visible)
+                    const routeBounds = res.routes[0].bounds;
+                    window.APP.map.fitBounds(routeBounds, {
+                        top: 40,
+                        bottom: 40,
+                        left: 40,
+                        right: 40
+                    });
+
                     const googleKm = res.routes[0].legs[0].distance.value / 1000;
 
                     const straightKm = google.maps.geometry.spherical.computeDistanceBetween(
@@ -1353,7 +1382,8 @@
             price = Math.ceil(price / 500) * 500;
             window.APP.calc.price = price;
 
-            const fakePrice = Math.ceil((price * 1.25) / 1000) * 1000;
+            // Fake price: 10% higher, rounded to nearest 500
+            const fakePrice = Math.ceil((price * 1.1) / 500) * 500;
             document.getElementById('fake-price').innerText = `Rp ${fakePrice.toLocaleString('id-ID')}`;
 
             document.getElementById('price-display').innerText = `Rp ${price.toLocaleString('id-ID')}`;
