@@ -116,14 +116,14 @@
         }
 
         .tabs {
-            display: flex;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
             gap: 8px;
             margin-bottom: 24px;
             background: var(--gray);
             padding: 4px;
             border-radius: 16px;
             border: 1px solid var(--border);
-            overflow-x: auto;
         }
 
         .tab {
@@ -137,6 +137,8 @@
             cursor: pointer;
             transition: all 0.2s;
             white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .tab.active {
@@ -311,6 +313,55 @@
             margin-top: 12px;
             display: none;
             line-height: 1.4;
+        }
+
+        .car-options {
+            display: none;
+            margin-bottom: 16px;
+            background: var(--gray);
+            border: 1px solid var(--border);
+            padding: 14px;
+            border-radius: 16px;
+        }
+
+        .car-options h4 {
+            font-size: 0.85rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .car-options .option-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .seat-option {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: white;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #475569;
+            cursor: pointer;
+        }
+
+        .seat-option input {
+            accent-color: var(--primary);
+        }
+
+        .toll-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #475569;
         }
 
         .price-card {
@@ -593,7 +644,8 @@
         <div class="tabs">
             <div class="tab active" onclick="setService('RIDE', this)">🛵 OJEK</div>
             <div class="tab" onclick="setService('SEND', this)">📦 SEND</div>
-            <div class="tab" onclick="setService('FOOD_MART', this)">🍜 JASTIP</div>
+            <div class="tab" onclick="setService('FOOD_MART', this)">🍜 FOOD & MART</div>
+            <div class="tab" onclick="setService('CAR', this)">🚗 MOBIL</div>
         </div>
 
         <div class="input-group">
@@ -658,8 +710,26 @@
             </div>
         </div>
 
+        <div class="car-options" id="car-options">
+            <h4>Pilih Kursi</h4>
+            <div class="option-row">
+                <label class="seat-option">
+                    <input type="radio" name="car-seat" value="4" checked onchange="handleCarOptionChange()">
+                    4 Seat
+                </label>
+                <label class="seat-option">
+                    <input type="radio" name="car-seat" value="6" onchange="handleCarOptionChange()">
+                    6 Seat
+                </label>
+            </div>
+            <label class="toll-option">
+                <input type="checkbox" id="car-toll" onchange="handleCarOptionChange()">
+                Lewat Tol (Biaya tol & parkir ditanggung penumpang)
+            </label>
+        </div>
+
         <div class="error-card" id="error-card">
-            ✋ Kejauhan Boss! Max 25km ya.
+            ✋ Kejauhan Boss! Max 30km ya.
         </div>
 
         <div class="price-card" id="price-card">
@@ -714,7 +784,7 @@
 
         window.APP = {
             service: 'RIDE',
-            config: { RIDE: null, FOOD_MART: null, SEND: null },
+            config: { RIDE: null, FOOD_MART: null, SEND: null, CAR: null },
             places: { origin: null, dest: null }, // Legacy compatibility
             calc: { distance: 0, price: 0 },
             map: null,
@@ -722,6 +792,7 @@
             directionsRenderer: null,
             markers: { origin: null, dest: null },
             historyData: null,
+            carOptions: { seats: 4, toll: false },
             // 🔒 TRANSACTIONAL PICKER STATE MACHINE
             picker: {
                 activeField: null,      // 'pickup' or 'dropoff'
@@ -765,27 +836,36 @@
             }
         }
         loadConfigs();
+
+        async function loadCarConfig() {
+            try {
+                const carSnap = await getDoc(doc(db, 'pricing_configs', 'CAR_v1'));
+                if (carSnap.exists()) window.APP.config.CAR = carSnap.data();
+            } catch (e) {
+                console.error("❌ Car Config Error:", e);
+            }
+        }
+        loadCarConfig();
     </script>
 
     <script>
         const CONFIG_WA = "62895330091464";
 
-        function initMap() {
+        function getServiceMapSettings(service) {
             const centerSalatiga = { lat: -7.3305, lng: 110.5084 };
+            const isCar = service === 'CAR';
+            return {
+                center: centerSalatiga,
+                zoom: isCar ? 10 : 13
+            };
+        }
+
+        function initMap() {
+            const mapSettings = getServiceMapSettings(window.APP.service);
 
             window.APP.map = new google.maps.Map(document.getElementById("map"), {
-                center: centerSalatiga,
-                zoom: 14,
-                minZoom: 13,
-                restriction: {
-                    latLngBounds: {
-                        north: -6.5,
-                        south: -8.0,
-                        west: 110.0,
-                        east: 111.5
-                    },
-                    strictBounds: true
-                },
+                center: mapSettings.center,
+                zoom: mapSettings.zoom,
                 gestureHandling: "greedy",
                 disableDefaultUI: true,
                 clickableIcons: false,
@@ -798,7 +878,7 @@
             // Initialize DirectionsRenderer for visual route
             window.APP.directionsRenderer = new google.maps.DirectionsRenderer({
                 suppressMarkers: true,
-                preserveViewport: false,
+                preserveViewport: true,
                 polylineOptions: {
                     strokeColor: "#4285F4",
                     strokeWeight: 5,
@@ -980,7 +1060,7 @@
                 const bounds = new google.maps.LatLngBounds();
                 bounds.extend(markers.origin.getPosition());
                 bounds.extend(markers.dest.getPosition());
-                map.fitBounds(bounds, 50);
+                map.fitBounds(bounds, { padding: 60 });
             } else {
                 map.setCenter({ lat: lat, lng: lng });
                 map.setZoom(16);
@@ -1105,17 +1185,24 @@
             setLoading(true);
             document.getElementById('error-card').style.display = 'none';
 
+            const isCar = window.APP.service === 'CAR';
+            const travelMode = isCar ? google.maps.TravelMode.DRIVING : google.maps.TravelMode.TWO_WHEELER;
+            const tollAllowed = window.APP.carOptions.toll;
+
             const directionsService = new google.maps.DirectionsService();
             directionsService.route({
                 origin: origin.geometry.location,
                 destination: dest.geometry.location,
-                travelMode: google.maps.TravelMode.TWO_WHEELER,
-                avoidTolls: true
+                travelMode: travelMode,
+                avoidTolls: !tollAllowed
             }, (res, status) => {
                 setLoading(false);
                 if (status === 'OK') {
                     // DISPLAY VISUAL ROUTE (BLUE LINE)
                     window.APP.directionsRenderer.setDirections(res);
+                    if (res.routes[0]?.bounds) {
+                        window.APP.map.fitBounds(res.routes[0].bounds, { padding: 60 });
+                    }
 
                     const googleKm = res.routes[0].legs[0].distance.value / 1000;
 
@@ -1124,18 +1211,21 @@
                         res.routes[0].legs[0].end_location
                     ) / 1000;
 
-                    const configRide = window.APP.config.RIDE || {};
-                    const logic = configRide.distance_logic || { lmf: 1.25, detour_limit: 1.15 };
+                    const configService = window.APP.config[window.APP.service] || window.APP.config.RIDE || {};
+                    const logic = configService.distance_logic || { lmf: 1.25, detour_limit: 1.15 };
 
                     let finalKm = googleKm;
-                    const motorEstimate = straightKm * logic.lmf;
-                    if (googleKm > motorEstimate * logic.detour_limit) finalKm = motorEstimate;
-                    else if (googleKm < straightKm * 1.05) finalKm = straightKm * 1.10;
+                    if (!isCar) {
+                        const motorEstimate = straightKm * logic.lmf;
+                        if (googleKm > motorEstimate * logic.detour_limit) finalKm = motorEstimate;
+                        else if (googleKm < straightKm * 1.05) finalKm = straightKm * 1.10;
+                    }
 
                     window.APP.calc.distance = parseFloat(finalKm.toFixed(2));
 
-                    if (window.APP.calc.distance > 25) {
-                        showError("Kejauhan Boss! Max 25km ya.");
+                    const maxDistance = isCar ? 150 : 30;
+                    if (window.APP.calc.distance > maxDistance) {
+                        showError(`Kejauhan Boss! Max ${maxDistance}km ya.`);
                     } else {
                         calculatePrice(finalKm);
                     }
@@ -1179,10 +1269,14 @@
                 else price = tiers.MID.base_fee + ((distance - baseLimit) * tiers.MID.price_per_km);
             }
 
+            if (service === 'CAR' && window.APP.carOptions.seats === 6) {
+                price *= 1.3;
+            }
+
             price = Math.ceil(price / 500) * 500;
             window.APP.calc.price = price;
 
-            const fakePrice = Math.ceil((price * 1.25) / 1000) * 1000;
+            const fakePrice = Math.ceil((price * 1.10) / 500) * 500;
             document.getElementById('fake-price').innerText = `Rp ${fakePrice.toLocaleString('id-ID')}`;
 
             document.getElementById('price-display').innerText = `Rp ${price.toLocaleString('id-ID')}`;
@@ -1217,6 +1311,7 @@
             if (window.APP.service === 'RIDE') { displayService = 'Ojek'; serviceCode = 'OJK'; }
             if (window.APP.service === 'SEND') { displayService = 'Kirim Barang'; serviceCode = 'SND'; }
             if (window.APP.service === 'FOOD_MART') { displayService = 'Food & Mart'; serviceCode = 'JST'; }
+            if (window.APP.service === 'CAR') { displayService = 'Mobil'; serviceCode = 'CAR'; }
 
             const orderID = `${serviceCode}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
@@ -1237,6 +1332,14 @@
                 msg += `----------------\n` +
                     `Item: ${items}\n` +
                     `Est. Harga: Rp ${estPrice || 0}\n`;
+            }
+
+            if (window.APP.service === 'CAR') {
+                const seatLabel = window.APP.carOptions.seats === 6 ? '6 Seat' : '4 Seat';
+                const tollLabel = window.APP.carOptions.toll ? 'Yes' : 'No';
+                msg += `----------------\n` +
+                    `[${seatLabel}]\n` +
+                    `Via Tol: ${tollLabel}\n`;
             }
 
             msg += `----------------\n` +
@@ -1277,6 +1380,7 @@
             if (window.APP.markers.dest) window.APP.markers.dest.setMap(null);
             window.APP.markers = { origin: null, dest: null };
             window.APP.calc = { distance: 0, price: 0 };
+            window.APP.carOptions = { seats: 4, toll: false };
 
             // CLEAR ROUTE LINE
             if (window.APP.directionsRenderer) {
@@ -1293,6 +1397,9 @@
             const legalWarning = document.getElementById('legal-warning');
             const originInput = document.getElementById('origin');
             const destInput = document.getElementById('destination');
+            const carOptions = document.getElementById('car-options');
+            const carSeatDefault = document.querySelector('input[name="car-seat"][value="4"]');
+            const carToll = document.getElementById('car-toll');
 
             const gpsOrigin = document.getElementById('gps-origin');
             const gpsDestination = document.getElementById('gps-destination');
@@ -1302,6 +1409,9 @@
 
             jastipField.style.display = 'none';
             legalWarning.style.display = 'none';
+            carOptions.style.display = 'none';
+            if (carSeatDefault) carSeatDefault.checked = true;
+            if (carToll) carToll.checked = false;
 
             if (type === 'FOOD_MART') {
                 jastipField.style.display = 'block';
@@ -1313,13 +1423,41 @@
                 gpsOrigin.style.display = 'flex';
                 originInput.placeholder = "Ambil paket di mana?";
                 destInput.placeholder = "Kirim ke mana?";
+            } else if (type === 'CAR') {
+                carOptions.style.display = 'block';
+                gpsOrigin.style.display = 'flex';
+                originInput.placeholder = "Jemput di mana? (Cari Hotel/Mall)";
+                destInput.placeholder = "Antar ke mana?";
             } else {
                 gpsOrigin.style.display = 'flex';
                 originInput.placeholder = "Jemput di mana? (Cari Masjid/Sekolah)";
                 destInput.placeholder = "Antar ke mana?";
             }
 
+            const mapSettings = getServiceMapSettings(type);
+            if (window.APP.map) {
+                window.APP.map.setCenter(mapSettings.center);
+                window.APP.map.setZoom(mapSettings.zoom);
+            }
+
             updateLink();
+        }
+
+        window.handleCarOptionChange = function () {
+            const selected = document.querySelector('input[name="car-seat"]:checked');
+            const seatValue = selected ? parseInt(selected.value, 10) : 4;
+            const tollValue = document.getElementById('car-toll').checked;
+
+            window.APP.carOptions.seats = seatValue;
+            window.APP.carOptions.toll = tollValue;
+
+            if (window.APP.places.origin && window.APP.places.dest) {
+                calculateRoute();
+            } else if (window.APP.calc.distance > 0) {
+                calculatePrice(window.APP.calc.distance);
+            } else {
+                updateLink();
+            }
         }
 
         function expandMap() {
@@ -1359,20 +1497,10 @@
             document.getElementById('picker-address').innerText = 'Geser peta untuk memilih lokasi...';
 
             if (!window.APP.pickerMap) {
-                const centerSalatiga = { lat: -7.3305, lng: 110.5084 };
+                const mapSettings = getServiceMapSettings(window.APP.service);
                 window.APP.pickerMap = new google.maps.Map(document.getElementById("picker-map"), {
-                    center: centerSalatiga,
-                    zoom: 17,
-                    minZoom: 13,
-                    restriction: {
-                        latLngBounds: {
-                            north: -6.5,
-                            south: -8.0,
-                            west: 110.0,
-                            east: 111.5
-                        },
-                        strictBounds: true
-                    },
+                    center: mapSettings.center,
+                    zoom: mapSettings.zoom + 4,
                     gestureHandling: "greedy",
                     disableDefaultUI: true,
                     clickableIcons: false,
@@ -1399,7 +1527,7 @@
                 // 🧭 SAFE INITIALIZATION - Priority: existing > GPS > default
                 const field = type === 'origin' ? 'origin' : 'dest';
                 const existingPlace = window.APP.places[field];
-                const centerSalatiga = { lat: -7.3305, lng: 110.5084 };
+                const mapSettings = getServiceMapSettings(window.APP.service);
 
                 if (existingPlace && existingPlace.geometry) {
                     // Use existing confirmed location
@@ -1410,7 +1538,7 @@
                     window.APP.pickerMap.setZoom(18);
                 } else if (navigator.geolocation) {
                     // Try GPS for initial position
-                    window.APP.picker.currentLocation = centerSalatiga; // Fallback immediately
+                    window.APP.picker.currentLocation = mapSettings.center; // Fallback immediately
                     navigator.geolocation.getCurrentPosition(
                         (position) => {
                             const lat = position.coords.latitude;
@@ -1420,15 +1548,15 @@
                             window.APP.pickerMap.setZoom(18);
                         },
                         () => {
-                            window.APP.pickerMap.setCenter(centerSalatiga);
-                            window.APP.pickerMap.setZoom(17);
+                            window.APP.pickerMap.setCenter(mapSettings.center);
+                            window.APP.pickerMap.setZoom(mapSettings.zoom + 4);
                         }
                     );
                 } else {
                     // Default to Salatiga center
-                    window.APP.picker.currentLocation = centerSalatiga;
-                    window.APP.pickerMap.setCenter(centerSalatiga);
-                    window.APP.pickerMap.setZoom(17);
+                    window.APP.picker.currentLocation = mapSettings.center;
+                    window.APP.pickerMap.setCenter(mapSettings.center);
+                    window.APP.pickerMap.setZoom(mapSettings.zoom + 4);
                 }
             }, 300);
 
