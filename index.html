@@ -116,27 +116,28 @@
         }
 
         .tabs {
-            display: flex;
-            gap: 8px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 4px;
             margin-bottom: 24px;
             background: var(--gray);
             padding: 4px;
             border-radius: 16px;
             border: 1px solid var(--border);
-            overflow-x: auto;
         }
 
         .tab {
-            flex: 1;
-            padding: 12px;
+            padding: 10px 4px;
             text-align: center;
             border-radius: 12px;
             font-weight: 700;
-            font-size: 0.9rem;
+            font-size: clamp(0.65rem, 2.5vw, 0.85rem);
             color: #64748B;
             cursor: pointer;
             transition: all 0.2s;
             white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .tab.active {
@@ -594,6 +595,7 @@
             <div class="tab active" onclick="setService('RIDE', this)">🛵 OJEK</div>
             <div class="tab" onclick="setService('SEND', this)">📦 SEND</div>
             <div class="tab" onclick="setService('FOOD_MART', this)">🍜 JASTIP</div>
+            <div class="tab" onclick="setService('CAR', this)">🚗 MOBIL</div>
         </div>
 
         <div class="input-group">
@@ -714,7 +716,7 @@
 
         window.APP = {
             service: 'RIDE',
-            config: { RIDE: null, FOOD_MART: null, SEND: null },
+            config: { RIDE: null, FOOD_MART: null, SEND: null, CAR: null },
             places: { origin: null, dest: null }, // Legacy compatibility
             calc: { distance: 0, price: 0 },
             map: null,
@@ -722,6 +724,8 @@
             directionsRenderer: null,
             markers: { origin: null, dest: null },
             historyData: null,
+            autocompleteOrigin: null,
+            autocompleteDest: null,
             // 🔒 TRANSACTIONAL PICKER STATE MACHINE
             picker: {
                 activeField: null,      // 'pickup' or 'dropoff'
@@ -750,15 +754,17 @@
 
         async function loadConfigs() {
             try {
-                const [rideSnap, foodSnap, sendSnap] = await Promise.all([
+                const [rideSnap, foodSnap, sendSnap, carSnap] = await Promise.all([
                     getDoc(doc(db, 'pricing_configs', 'RIDE_v1')),
                     getDoc(doc(db, 'pricing_configs', 'FOOD_MART_v1')),
-                    getDoc(doc(db, 'pricing_configs', 'SEND_v1'))
+                    getDoc(doc(db, 'pricing_configs', 'SEND_v1')),
+                    getDoc(doc(db, 'pricing_configs', 'CAR_v1'))
                 ]);
 
                 if (rideSnap.exists()) window.APP.config.RIDE = rideSnap.data();
                 if (foodSnap.exists()) window.APP.config.FOOD_MART = foodSnap.data();
                 if (sendSnap.exists()) window.APP.config.SEND = sendSnap.data();
+                if (carSnap.exists()) window.APP.config.CAR = carSnap.data();
                 console.log("✅ CONFIG LOADED");
             } catch (e) {
                 console.error("❌ Config Error:", e);
@@ -808,6 +814,69 @@
             window.APP.directionsRenderer.setMap(window.APP.map);
 
             checkHistory();
+        }
+
+        // 🌍 DYNAMIC GEOFENCING - Updates map and autocomplete bounds based on service
+        const SALATIGA_CENTER = { lat: -7.3305, lng: 110.5084 };
+
+        function getServiceBounds(serviceType) {
+            // CAR: 150km search, 200km view | MOTOR: 30km search, 60km view
+            const isCAR = serviceType === 'CAR';
+            const searchRadiusKm = isCAR ? 150 : 30;
+            const viewRadiusKm = isCAR ? 200 : 60;
+            const maxDistanceKm = isCAR ? 150 : 25;
+
+            // Convert km to approximate degrees (1 degree ≈ 111km)
+            const searchDeg = searchRadiusKm / 111;
+            const viewDeg = viewRadiusKm / 111;
+
+            return {
+                search: new google.maps.LatLngBounds(
+                    new google.maps.LatLng(SALATIGA_CENTER.lat - searchDeg, SALATIGA_CENTER.lng - searchDeg),
+                    new google.maps.LatLng(SALATIGA_CENTER.lat + searchDeg, SALATIGA_CENTER.lng + searchDeg)
+                ),
+                view: {
+                    north: SALATIGA_CENTER.lat + viewDeg,
+                    south: SALATIGA_CENTER.lat - viewDeg,
+                    west: SALATIGA_CENTER.lng - viewDeg,
+                    east: SALATIGA_CENTER.lng + viewDeg
+                },
+                maxDistance: maxDistanceKm
+            };
+        }
+
+        function updateMapBoundaries(serviceType) {
+            const bounds = getServiceBounds(serviceType);
+
+            // Update main map restriction
+            if (window.APP.map) {
+                window.APP.map.setOptions({
+                    restriction: {
+                        latLngBounds: bounds.view,
+                        strictBounds: true
+                    }
+                });
+            }
+
+            // Update picker map restriction
+            if (window.APP.pickerMap) {
+                window.APP.pickerMap.setOptions({
+                    restriction: {
+                        latLngBounds: bounds.view,
+                        strictBounds: true
+                    }
+                });
+            }
+
+            // Update autocomplete bounds
+            if (window.APP.autocompleteOrigin) {
+                window.APP.autocompleteOrigin.setBounds(bounds.search);
+                window.APP.autocompleteOrigin.setOptions({ strictBounds: true });
+            }
+            if (window.APP.autocompleteDest) {
+                window.APP.autocompleteDest.setBounds(bounds.search);
+                window.APP.autocompleteDest.setOptions({ strictBounds: true });
+            }
         }
 
         function checkHistory() {
@@ -1045,22 +1114,23 @@
         }
 
         function initAutocomplete() {
-            // 50KM RADIUS AROUND SALATIGA - BIAS NOT BLOCK
-            const bounds = new google.maps.LatLngBounds(
-                new google.maps.LatLng(-7.78, 110.05), // Southwest
-                new google.maps.LatLng(-6.88, 110.95)  // Northeast
-            );
+            // Initial bounds (will be updated by updateMapBoundaries)
+            const bounds = getServiceBounds('RIDE').search;
 
             const options = {
                 bounds: bounds,
                 componentRestrictions: { country: "id" },
                 fields: ["geometry", "name", "formatted_address"],
-                strictBounds: false, // BIAS results, don't block - prevents autocomplete lag
+                strictBounds: true,
                 types: ['establishment', 'geocode']
             };
 
             const acOrigin = new google.maps.places.Autocomplete(document.getElementById('origin'), options);
             const acDest = new google.maps.places.Autocomplete(document.getElementById('destination'), options);
+
+            // Store references for dynamic updates
+            window.APP.autocompleteOrigin = acOrigin;
+            window.APP.autocompleteDest = acDest;
 
             acOrigin.bindTo('bounds', window.APP.map);
             acDest.bindTo('bounds', window.APP.map);
@@ -1105,17 +1175,26 @@
             setLoading(true);
             document.getElementById('error-card').style.display = 'none';
 
+            // Use DRIVING for CAR, TWO_WHEELER for motor services
+            const travelMode = window.APP.service === 'CAR'
+                ? google.maps.TravelMode.DRIVING
+                : google.maps.TravelMode.TWO_WHEELER;
+
             const directionsService = new google.maps.DirectionsService();
             directionsService.route({
                 origin: origin.geometry.location,
                 destination: dest.geometry.location,
-                travelMode: google.maps.TravelMode.TWO_WHEELER,
-                avoidTolls: true
+                travelMode: travelMode,
+                avoidTolls: window.APP.service !== 'CAR'
             }, (res, status) => {
                 setLoading(false);
                 if (status === 'OK') {
                     // DISPLAY VISUAL ROUTE (BLUE LINE)
                     window.APP.directionsRenderer.setDirections(res);
+
+                    // 🔧 FIX 2: SMART PADDING - Ensure full route visibility
+                    const bounds = res.routes[0].bounds;
+                    window.APP.map.fitBounds(bounds, { padding: 60 });
 
                     const googleKm = res.routes[0].legs[0].distance.value / 1000;
 
@@ -1124,8 +1203,9 @@
                         res.routes[0].legs[0].end_location
                     ) / 1000;
 
-                    const configRide = window.APP.config.RIDE || {};
-                    const logic = configRide.distance_logic || { lmf: 1.25, detour_limit: 1.15 };
+                    const configKey = window.APP.service === 'FOOD_MART' ? 'FOOD_MART' : window.APP.service;
+                    const config = window.APP.config[configKey] || window.APP.config.RIDE || {};
+                    const logic = config.distance_logic || { lmf: 1.25, detour_limit: 1.15 };
 
                     let finalKm = googleKm;
                     const motorEstimate = straightKm * logic.lmf;
@@ -1134,8 +1214,10 @@
 
                     window.APP.calc.distance = parseFloat(finalKm.toFixed(2));
 
-                    if (window.APP.calc.distance > 25) {
-                        showError("Kejauhan Boss! Max 25km ya.");
+                    // Dynamic max distance based on service
+                    const maxDistance = window.APP.service === 'CAR' ? 150 : 25;
+                    if (window.APP.calc.distance > maxDistance) {
+                        showError(`Kejauhan Boss! Max ${maxDistance}km ya.`);
                     } else {
                         calculatePrice(finalKm);
                     }
@@ -1161,9 +1243,13 @@
 
         function calculatePrice(distance) {
             const service = window.APP.service;
-            const config = window.APP.config[service];
+            let config = window.APP.config[service];
 
-            if (!config) return;
+            // Fallback to RIDE config if service config not available (e.g., CAR_v1 not in Firebase yet)
+            if (!config) {
+                config = window.APP.config.RIDE;
+                if (!config) return;
+            }
 
             let price = 0;
             const tiers = config.pricing_model?.tiers || config.TIERS;
@@ -1173,7 +1259,7 @@
                 if (tier.calculation_type === 'FLAT') price = tier.base_price;
                 else price = tier.base_price + ((distance - tier.offset_km) * tier.price_per_km);
             }
-            else if (tiers.BASE) {
+            else if (tiers && tiers.BASE) {
                 const baseLimit = tiers.BASE.max_distance_km || 2;
                 if (distance <= baseLimit) price = tiers.BASE.delivery_fee;
                 else price = tiers.MID.base_fee + ((distance - baseLimit) * tiers.MID.price_per_km);
@@ -1182,7 +1268,9 @@
             price = Math.ceil(price / 500) * 500;
             window.APP.calc.price = price;
 
-            const fakePrice = Math.ceil((price * 1.25) / 1000) * 1000;
+            // 🔧 FIX 4: PRICING PSYCHOLOGY - 10% margin, round UP to nearest 500
+            // Formula: Math.ceil((realPrice * 1.10) / 500) * 500
+            const fakePrice = Math.ceil((price * 1.10) / 500) * 500;
             document.getElementById('fake-price').innerText = `Rp ${fakePrice.toLocaleString('id-ID')}`;
 
             document.getElementById('price-display').innerText = `Rp ${price.toLocaleString('id-ID')}`;
@@ -1213,14 +1301,34 @@
 
             let displayService = window.APP.service;
             let serviceCode = 'OJK';
+            let headerText = '';
+            let footerNote = '';
 
-            if (window.APP.service === 'RIDE') { displayService = 'Ojek'; serviceCode = 'OJK'; }
-            if (window.APP.service === 'SEND') { displayService = 'Kirim Barang'; serviceCode = 'SND'; }
-            if (window.APP.service === 'FOOD_MART') { displayService = 'Food & Mart'; serviceCode = 'JST'; }
+            if (window.APP.service === 'RIDE') {
+                displayService = 'Ojek';
+                serviceCode = 'OJK';
+                headerText = 'Order Ojek';
+            }
+            if (window.APP.service === 'SEND') {
+                displayService = 'Kirim Barang';
+                serviceCode = 'SND';
+                headerText = 'Order Kirim Barang';
+            }
+            if (window.APP.service === 'FOOD_MART') {
+                displayService = 'Food & Mart';
+                serviceCode = 'JST';
+                headerText = 'Order Food & Mart';
+            }
+            if (window.APP.service === 'CAR') {
+                displayService = 'MOBIL';
+                serviceCode = 'CAR';
+                headerText = 'Order MOBIL (Salatiga & Sekitarnya)';
+                footerNote = '\n⚠️ Konfirmasi: Butuh 4-Seat (City Car) atau 6-Seat (MPV)?';
+            }
 
             const orderID = `${serviceCode}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
-            let msg = `Halo Kak! Order ${displayService}\n` +
+            let msg = `Halo Kak! ${headerText}\n` +
                 `ID: ${orderID}\n` +
                 `----------------\n` +
                 `Asal: ${originVal}\n` +
@@ -1243,7 +1351,7 @@
                 `Jarak: ${window.APP.calc.distance} km\n` +
                 `Ongkir: Rp ${price.toLocaleString('id-ID')}\n` +
                 `================\n` +
-                `Gas jemput?`;
+                `Gas jemput?${footerNote}`;
 
             btn.classList.remove('disabled');
             textBtn.innerText = `GAS ORDER • Rp ${price.toLocaleString('id-ID')}`;
@@ -1313,11 +1421,18 @@
                 gpsOrigin.style.display = 'flex';
                 originInput.placeholder = "Ambil paket di mana?";
                 destInput.placeholder = "Kirim ke mana?";
+            } else if (type === 'CAR') {
+                gpsOrigin.style.display = 'flex';
+                originInput.placeholder = "Jemput di mana? (Bisa ke Jogja/Solo/Semarang)";
+                destInput.placeholder = "Antar ke mana?";
             } else {
                 gpsOrigin.style.display = 'flex';
                 originInput.placeholder = "Jemput di mana? (Cari Masjid/Sekolah)";
                 destInput.placeholder = "Antar ke mana?";
             }
+
+            // 🌍 FIX 1: DYNAMIC GEOFENCING - Update map and autocomplete bounds
+            updateMapBoundaries(type);
 
             updateLink();
         }
