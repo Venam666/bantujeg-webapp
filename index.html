@@ -128,17 +128,27 @@
 
         .tab {
             flex: 1;
-            padding: 12px;
+            padding: 8px;
             text-align: center;
             border-radius: 12px;
             font-weight: 700;
-            font-size: 0.9rem;
+            font-size: 0.7rem;
             color: #64748B;
             cursor: pointer;
             transition: all 0.2s;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .tab .tab-icon {
+            font-size: 1.2rem;
+            line-height: 1;
         }
 
         .tab.active {
@@ -359,9 +369,9 @@
             align-items: center;
             gap: 8px;
             margin-top: 10px;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             font-weight: 600;
-            color: #475569;
+            color: #b45309;
         }
 
         .price-card {
@@ -642,10 +652,22 @@
         </div>
 
         <div class="tabs">
-            <div class="tab active" onclick="setService('RIDE', this)">🛵 OJEK</div>
-            <div class="tab" onclick="setService('SEND', this)">📦 SEND</div>
-            <div class="tab" onclick="setService('FOOD_MART', this)">🍜 FOOD & MART</div>
-            <div class="tab" onclick="setService('CAR', this)">🚗 MOBIL</div>
+            <div class="tab active" onclick="setService('RIDE', this)">
+                <span class="tab-icon">🛵</span>
+                <span>OJEK</span>
+            </div>
+            <div class="tab" onclick="setService('SEND', this)">
+                <span class="tab-icon">📦</span>
+                <span>SEND</span>
+            </div>
+            <div class="tab" onclick="setService('FOOD_MART', this)">
+                <span class="tab-icon">🍜</span>
+                <span>FOOD & MART</span>
+            </div>
+            <div class="tab" onclick="setService('CAR', this)">
+                <span class="tab-icon">🚗</span>
+                <span>MOBIL</span>
+            </div>
         </div>
 
         <div class="input-group">
@@ -715,16 +737,16 @@
             <div class="option-row">
                 <label class="seat-option">
                     <input type="radio" name="car-seat" value="4" checked onchange="handleCarOptionChange()">
-                    4 Seat
+                    🚗 Car
                 </label>
                 <label class="seat-option">
                     <input type="radio" name="car-seat" value="6" onchange="handleCarOptionChange()">
-                    6 Seat
+                    🚐 Car L
                 </label>
             </div>
             <label class="toll-option">
                 <input type="checkbox" id="car-toll" onchange="handleCarOptionChange()">
-                Lewat Tol (Biaya tol & parkir ditanggung penumpang)
+                Lewat Jalan Tol (Biaya order tidak termasuk biaya tol, parkir atau pungutan tambahan lain)
             </label>
         </div>
 
@@ -851,12 +873,20 @@
     <script>
         const CONFIG_WA = "62895330091464";
 
+        const CENTRAL_JAVA_BOUNDS = {
+            north: -6.4,
+            south: -8.2,
+            west: 109.0,
+            east: 111.8
+        };
+
         function getServiceMapSettings(service) {
             const centerSalatiga = { lat: -7.3305, lng: 110.5084 };
             const isCar = service === 'CAR';
             return {
                 center: centerSalatiga,
-                zoom: isCar ? 10 : 13
+                zoom: isCar ? 10 : 13,
+                minZoom: isCar ? 9 : 12
             };
         }
 
@@ -866,6 +896,11 @@
             window.APP.map = new google.maps.Map(document.getElementById("map"), {
                 center: mapSettings.center,
                 zoom: mapSettings.zoom,
+                minZoom: mapSettings.minZoom,
+                restriction: {
+                    latLngBounds: CENTRAL_JAVA_BOUNDS,
+                    strictBounds: false
+                },
                 gestureHandling: "greedy",
                 disableDefaultUI: true,
                 clickableIcons: false,
@@ -1335,7 +1370,7 @@
             }
 
             if (window.APP.service === 'CAR') {
-                const seatLabel = window.APP.carOptions.seats === 6 ? '6 Seat' : '4 Seat';
+                const seatLabel = window.APP.carOptions.seats === 6 ? 'Car L' : 'Car';
                 const tollLabel = window.APP.carOptions.toll ? 'Yes' : 'No';
                 msg += `----------------\n` +
                     `[${seatLabel}]\n` +
@@ -1436,8 +1471,15 @@
 
             const mapSettings = getServiceMapSettings(type);
             if (window.APP.map) {
-                window.APP.map.setCenter(mapSettings.center);
-                window.APP.map.setZoom(mapSettings.zoom);
+                window.APP.map.setOptions({
+                    center: mapSettings.center,
+                    zoom: mapSettings.zoom,
+                    minZoom: mapSettings.minZoom,
+                    restriction: {
+                        latLngBounds: CENTRAL_JAVA_BOUNDS,
+                        strictBounds: false
+                    }
+                });
             }
 
             updateLink();
