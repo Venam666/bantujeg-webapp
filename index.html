@@ -901,6 +901,7 @@
             // Initialize DirectionsRenderer for visual route
             window.APP.directionsRenderer = new google.maps.DirectionsRenderer({
                 suppressMarkers: true,
+                suppressMarkers: true,
                 preserveViewport: false,
                 polylineOptions: {
                     strokeColor: "#4285F4",
@@ -911,6 +912,73 @@
             window.APP.directionsRenderer.setMap(window.APP.map);
 
             checkHistory();
+        }
+
+        // 🟢 HELPER: Calculate LAT/LNG bounds for a givin radius (km)
+        function getBoundsForRadius(radiusKm) {
+            const center = { lat: -7.3305, lng: 110.5084 };
+            const kmPerDegree = 111; // Approx
+            const latDelta = radiusKm / kmPerDegree;
+            const lngDelta = radiusKm / (kmPerDegree * Math.cos(center.lat * Math.PI / 180));
+
+            return new google.maps.LatLngBounds(
+                new google.maps.LatLng(center.lat - latDelta, center.lng - lngDelta),
+                new google.maps.LatLng(center.lat + latDelta, center.lng + lngDelta)
+            );
+        }
+
+        // 🟢 HELPER: Get bounds based on active service
+        function getBoundsForService(service) {
+            if (service === 'CAR') {
+                return getBoundsForRadius(150); // 150km Search for CAR
+            } else {
+                return getBoundsForRadius(25);  // 25km Search for MOTOR
+            }
+        }
+
+        // 🟢 HELPER: Update Map View Constraints
+        function updateMapRestrictions(service) {
+            if (!window.APP.map) return;
+
+            let restriction;
+
+            if (service === 'CAR') {
+                // 200km View Radius for CAR (Wider view than search)
+                restriction = {
+                    latLngBounds: {
+                        north: -6.0,    // Semarang/Demak
+                        south: -8.5,    // Jogja/South Coast
+                        west: 109.5,    // Kebumen
+                        east: 111.5     // Solo/Ngawi
+                    },
+                    strictBounds: true
+                };
+            } else {
+                // 60km View Radius for MOTOR (Wider than 25km search)
+                restriction = {
+                    latLngBounds: {
+                        north: -7.0,
+                        south: -7.66,
+                        west: 110.0,
+                        east: 111.0
+                    },
+                    strictBounds: true
+                };
+            }
+
+            window.APP.map.setOptions({ restriction: restriction });
+        }
+
+        // 🟢 HELPER: Validate if point is within allowed service radius
+        function isWithinAllowedRadius(lat, lng, service) {
+            const center = { lat: -7.3305, lng: 110.5084 };
+            const distance = google.maps.geometry.spherical.computeDistanceBetween(
+                new google.maps.LatLng(lat, lng),
+                new google.maps.LatLng(center.lat, center.lng)
+            ) / 1000; // to km
+
+            if (service === 'CAR') return distance <= 150;
+            return distance <= 25;
         }
 
         function checkHistory() {
@@ -1208,17 +1276,14 @@
         }
 
         function initAutocomplete() {
-            // 50KM RADIUS AROUND SALATIGA - BIAS NOT BLOCK
-            const bounds = new google.maps.LatLngBounds(
-                new google.maps.LatLng(-7.78, 110.05), // Southwest
-                new google.maps.LatLng(-6.88, 110.95)  // Northeast
-            );
+            // 🟢 DYNAMIC SEARCH BOUNDS
+            const bounds = getBoundsForService(window.APP.service);
 
             const options = {
                 bounds: bounds,
                 componentRestrictions: { country: "id" },
                 fields: ["geometry", "name", "formatted_address"],
-                strictBounds: false, // BIAS results, don't block - prevents autocomplete lag
+                strictBounds: true, // Restricted to service area
                 types: ['establishment', 'geocode']
             };
 
@@ -1239,6 +1304,16 @@
             const place = ac.getPlace();
             if (!place.geometry) return;
 
+            const lat = place.geometry.location.lat();
+            const lng = place.geometry.location.lng();
+
+            // 🟢 VALIDATE RADIUS
+            if (!isWithinAllowedRadius(lat, lng, window.APP.service)) {
+                alert(`Lokasi terlalu jauh! Maksimal ${window.APP.service === 'CAR' ? '150km' : '25km'} dari Salatiga.`);
+                document.getElementById(type === 'origin' ? 'origin' : 'destination').value = '';
+                return;
+            }
+
             const inputId = type === 'origin' ? 'origin' : 'destination';
             const cleaned = cleanAddress(place.formatted_address);
             document.getElementById(inputId).value = cleaned;
@@ -1246,8 +1321,6 @@
 
             // Write to central state with source tracking
             const field = type === 'origin' ? 'pickup' : 'dropoff';
-            const lat = place.geometry.location.lat();
-            const lng = place.geometry.location.lng();
 
             updateLocationState(field, lat, lng, 'autocomplete', cleaned);
             updateMarker(type, lat, lng);
@@ -1292,12 +1365,24 @@
 
                     // 🗺️ FIX: Fit map to route bounds with padding (ensure complete route visible)
                     const routeBounds = res.routes[0].bounds;
-                    window.APP.map.fitBounds(routeBounds, {
-                        top: 40,
-                        bottom: 40,
-                        left: 40,
-                        right: 40
-                    });
+
+                    // Apply generous padding to prevent cutoff
+                    const padding = {
+                        top: 60,
+                        right: 60,
+                        bottom: 60,
+                        left: 60
+                    };
+
+                    window.APP.map.fitBounds(routeBounds, padding);
+
+                    // Safety check: verify zoom isn't too tight
+                    setTimeout(() => {
+                        const currentZoom = window.APP.map.getZoom();
+                        if (currentZoom > 12) {
+                            window.APP.map.setZoom(currentZoom - 1);
+                        }
+                    }, 300);
 
                     const googleKm = res.routes[0].legs[0].distance.value / 1000;
 
@@ -1535,15 +1620,19 @@
                 gpsOrigin.style.display = 'flex';
                 originInput.placeholder = "Jemput di mana? (Alamat Lengkap)";
                 destInput.placeholder = "Tujuan ke mana?";
-                updateMapBoundsForService('CAR');
             } else {
                 gpsOrigin.style.display = 'flex';
                 originInput.placeholder = "Jemput di mana? (Cari Masjid/Sekolah)";
                 destInput.placeholder = "Antar ke mana?";
-                updateMapBoundsForService('RIDE');
             }
 
             updateLink();
+
+            // 🟢 UPDATE MAP RESTRICTIONS & AUTOCOMPLETE
+            updateMapRestrictions(type);
+
+            // Re-init autocomplete to apply new search bounds
+            setTimeout(() => initAutocomplete(), 100);
         }
 
         function expandMap() {
@@ -1584,17 +1673,25 @@
 
             if (!window.APP.pickerMap) {
                 const centerSalatiga = { lat: -7.3305, lng: 110.5084 };
+
+                // 🟢 DYNAMIC PICKER BOUNDS
+                let pickerBounds;
+                if (window.APP.service === 'CAR') {
+                    pickerBounds = {
+                        north: -6.0, south: -8.5, west: 109.5, east: 111.5
+                    };
+                } else {
+                    pickerBounds = {
+                        north: -7.0, south: -7.66, west: 110.0, east: 111.0
+                    };
+                }
+
                 window.APP.pickerMap = new google.maps.Map(document.getElementById("picker-map"), {
                     center: centerSalatiga,
                     zoom: 17,
-                    minZoom: 13,
+                    minZoom: 11,
                     restriction: {
-                        latLngBounds: {
-                            north: -6.5,
-                            south: -8.0,
-                            west: 110.0,
-                            east: 111.5
-                        },
+                        latLngBounds: pickerBounds,
                         strictBounds: true
                     },
                     gestureHandling: "greedy",
