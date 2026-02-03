@@ -116,38 +116,27 @@
         }
 
         .tabs {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 6px;
+            display: flex;
+            gap: 8px;
             margin-bottom: 24px;
             background: var(--gray);
             padding: 4px;
             border-radius: 16px;
             border: 1px solid var(--border);
-            touch-action: pan-y;
-            overflow: hidden;
-            width: 100%;
-            box-sizing: border-box;
+            overflow-x: auto;
         }
 
         .tab {
-            padding: 10px 4px;
+            flex: 1;
+            padding: 12px;
             text-align: center;
             border-radius: 12px;
             font-weight: 700;
-            font-size: 0.8rem;
+            font-size: 0.9rem;
             color: #64748B;
             cursor: pointer;
             transition: all 0.2s;
-            word-break: break-word;
-            min-height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-            white-space: normal;
-            line-height: 1.2;
-            box-sizing: border-box;
+            white-space: nowrap;
         }
 
         .tab.active {
@@ -155,19 +144,6 @@
             color: white;
             box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
             transform: scale(1.02);
-            max-width: 100%;
-        }
-
-        @media (max-width: 360px) {
-            .tab {
-                font-size: 0.75rem;
-                padding: 8px 2px;
-                min-height: 36px;
-            }
-
-            .tabs {
-                gap: 4px;
-            }
         }
 
         .input-group {
@@ -589,60 +565,6 @@
             cursor: not-allowed;
             box-shadow: none;
         }
-
-        /* CAR Service Styles */
-        .seat-chips {
-            display: flex;
-            gap: 8px;
-            margin-top: 8px;
-        }
-
-        .seat-chip {
-            flex: 1;
-            background: var(--gray);
-            border: 1px solid var(--border);
-            color: #64748B;
-            padding: 12px;
-            border-radius: 12px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .seat-chip.active {
-            background: var(--primary);
-            color: white;
-            border-color: var(--primary);
-            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
-        }
-
-        .seat-chip:active {
-            transform: scale(0.98);
-        }
-
-        .toll-checkbox {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 12px 16px;
-            background: #F0F9FF;
-            border: 1px solid #BAE6FD;
-            border-radius: 12px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: #0369A1;
-            cursor: pointer;
-            user-select: none;
-        }
-
-        .toll-checkbox input {
-            width: 18px;
-            height: 18px;
-            accent-color: var(--primary);
-            cursor: pointer;
-        }
     </style>
 </head>
 
@@ -671,8 +593,7 @@
         <div class="tabs">
             <div class="tab active" onclick="setService('RIDE', this)">🛵 OJEK</div>
             <div class="tab" onclick="setService('SEND', this)">📦 SEND</div>
-            <div class="tab" onclick="setService('FOOD_MART', this)">🍜 FOOD & MART</div>
-            <div class="tab" onclick="setService('CAR', this)">🚗 MOBIL</div>
+            <div class="tab" onclick="setService('FOOD_MART', this)">🍜 JASTIP</div>
         </div>
 
         <div class="input-group">
@@ -719,25 +640,6 @@
 
             <div id="legal-warning">
                 ⚠️ Dilarang kirim: Narkoba, Hewan, Senjata & Barang Ilegal. Driver berhak cek barang.
-            </div>
-
-            <!-- CAR Options Container -->
-            <div id="car-options" style="display: none;">
-                <div class="input-group">
-                    <label
-                        style="font-weight: 600; margin-bottom: 8px; display: block; color: var(--dark); font-size: 0.9rem;">Pilih
-                        Mobil:</label>
-                    <div class="seat-chips">
-                        <div class="seat-chip active" onclick="setCarOption('4_SEAT', this)">Hatchback (4 Seat)</div>
-                        <div class="seat-chip" onclick="setCarOption('6_SEAT', this)">Family (6 Seat) (+Harga)</div>
-                    </div>
-                </div>
-                <div class="input-group" style="margin-top: 12px;">
-                    <label class="toll-checkbox">
-                        <input type="checkbox" id="use-toll" onchange="toggleToll()">
-                        <span>Lewat Jalan Tol (Biaya Tol Exclude/Bayar Sendiri)</span>
-                    </label>
-                </div>
             </div>
         </div>
 
@@ -812,7 +714,7 @@
 
         window.APP = {
             service: 'RIDE',
-            config: { RIDE: null, FOOD_MART: null, SEND: null, CAR: null },
+            config: { RIDE: null, FOOD_MART: null, SEND: null },
             places: { origin: null, dest: null }, // Legacy compatibility
             calc: { distance: 0, price: 0 },
             map: null,
@@ -820,9 +722,6 @@
             directionsRenderer: null,
             markers: { origin: null, dest: null },
             historyData: null,
-            // CAR service specific state
-            carOption: '4_SEAT',  // '4_SEAT' or '6_SEAT'
-            useToll: false,       // Toll road preference for CAR
             // 🔒 TRANSACTIONAL PICKER STATE MACHINE
             picker: {
                 activeField: null,      // 'pickup' or 'dropoff'
@@ -851,17 +750,15 @@
 
         async function loadConfigs() {
             try {
-                const [rideSnap, foodSnap, sendSnap, carSnap] = await Promise.all([
+                const [rideSnap, foodSnap, sendSnap] = await Promise.all([
                     getDoc(doc(db, 'pricing_configs', 'RIDE_v1')),
                     getDoc(doc(db, 'pricing_configs', 'FOOD_MART_v1')),
-                    getDoc(doc(db, 'pricing_configs', 'SEND_v1')),
-                    getDoc(doc(db, 'pricing_configs', 'CAR_v1'))
+                    getDoc(doc(db, 'pricing_configs', 'SEND_v1'))
                 ]);
 
                 if (rideSnap.exists()) window.APP.config.RIDE = rideSnap.data();
                 if (foodSnap.exists()) window.APP.config.FOOD_MART = foodSnap.data();
                 if (sendSnap.exists()) window.APP.config.SEND = sendSnap.data();
-                if (carSnap.exists()) window.APP.config.CAR = carSnap.data();
                 console.log("✅ CONFIG LOADED");
             } catch (e) {
                 console.error("❌ Config Error:", e);
@@ -901,7 +798,6 @@
             // Initialize DirectionsRenderer for visual route
             window.APP.directionsRenderer = new google.maps.DirectionsRenderer({
                 suppressMarkers: true,
-                suppressMarkers: true,
                 preserveViewport: false,
                 polylineOptions: {
                     strokeColor: "#4285F4",
@@ -912,73 +808,6 @@
             window.APP.directionsRenderer.setMap(window.APP.map);
 
             checkHistory();
-        }
-
-        // 🟢 HELPER: Calculate LAT/LNG bounds for a givin radius (km)
-        function getBoundsForRadius(radiusKm) {
-            const center = { lat: -7.3305, lng: 110.5084 };
-            const kmPerDegree = 111; // Approx
-            const latDelta = radiusKm / kmPerDegree;
-            const lngDelta = radiusKm / (kmPerDegree * Math.cos(center.lat * Math.PI / 180));
-
-            return new google.maps.LatLngBounds(
-                new google.maps.LatLng(center.lat - latDelta, center.lng - lngDelta),
-                new google.maps.LatLng(center.lat + latDelta, center.lng + lngDelta)
-            );
-        }
-
-        // 🟢 HELPER: Get bounds based on active service
-        function getBoundsForService(service) {
-            if (service === 'CAR') {
-                return getBoundsForRadius(150); // 150km Search for CAR
-            } else {
-                return getBoundsForRadius(25);  // 25km Search for MOTOR
-            }
-        }
-
-        // 🟢 HELPER: Update Map View Constraints
-        function updateMapRestrictions(service) {
-            if (!window.APP.map) return;
-
-            let restriction;
-
-            if (service === 'CAR') {
-                // 200km View Radius for CAR (Wider view than search)
-                restriction = {
-                    latLngBounds: {
-                        north: -6.0,    // Semarang/Demak
-                        south: -8.5,    // Jogja/South Coast
-                        west: 109.5,    // Kebumen
-                        east: 111.5     // Solo/Ngawi
-                    },
-                    strictBounds: true
-                };
-            } else {
-                // 60km View Radius for MOTOR (Wider than 25km search)
-                restriction = {
-                    latLngBounds: {
-                        north: -7.0,
-                        south: -7.66,
-                        west: 110.0,
-                        east: 111.0
-                    },
-                    strictBounds: true
-                };
-            }
-
-            window.APP.map.setOptions({ restriction: restriction });
-        }
-
-        // 🟢 HELPER: Validate if point is within allowed service radius
-        function isWithinAllowedRadius(lat, lng, service) {
-            const center = { lat: -7.3305, lng: 110.5084 };
-            const distance = google.maps.geometry.spherical.computeDistanceBetween(
-                new google.maps.LatLng(lat, lng),
-                new google.maps.LatLng(center.lat, center.lng)
-            ) / 1000; // to km
-
-            if (service === 'CAR') return distance <= 150;
-            return distance <= 25;
         }
 
         function checkHistory() {
@@ -1032,64 +861,6 @@
             }
             updateLink();
             toggleClearBtn('note');
-        }
-
-        // 🚗 CAR SERVICE: Set car seat option
-        window.setCarOption = function (option, el) {
-            window.APP.carOption = option;
-            document.querySelectorAll('.seat-chip').forEach(chip => chip.classList.remove('active'));
-            el.classList.add('active');
-            if (window.APP.places.origin && window.APP.places.dest) {
-                calculatePrice(window.APP.calc.distance);
-                updateLink();
-            }
-        };
-
-        // 🚗 CAR SERVICE: Toggle toll road option
-        window.toggleToll = function () {
-            window.APP.useToll = document.getElementById('use-toll').checked;
-            if (window.APP.places.origin && window.APP.places.dest) {
-                calculateRoute();
-            }
-        };
-
-        // 🚗 CAR SERVICE: Update map bounds for service type
-        function updateMapBoundsForService(service) {
-            const map = window.APP.map;
-
-            if (service === 'CAR') {
-                // 150km bounds (covers Jogja, Semarang, Solo)
-                const wideBounds = {
-                    north: -6.0,    // Up to Semarang
-                    south: -8.5,    // Down to south of Magelang
-                    west: 109.5,    // West to Kebumen
-                    east: 111.5     // East to Solo
-                };
-
-                map.setOptions({
-                    restriction: {
-                        latLngBounds: wideBounds,
-                        strictBounds: true
-                    },
-                    zoom: 11  // Slightly zoomed out
-                });
-
-            } else {
-                // Original 50km bounds for RIDE/SEND/FOOD_MART
-                const strictBounds = {
-                    north: -6.5,
-                    south: -8.0,
-                    west: 110.0,
-                    east: 111.5
-                };
-
-                map.setOptions({
-                    restriction: {
-                        latLngBounds: strictBounds,
-                        strictBounds: true
-                    }
-                });
-            }
         }
 
         function cleanAddress(address) {
@@ -1210,8 +981,6 @@
                 bounds.extend(markers.origin.getPosition());
                 bounds.extend(markers.dest.getPosition());
                 map.fitBounds(bounds, 50);
-                // 🔵 FIX: Immediately show route when both markers exist
-                calculateRoute();
             } else {
                 map.setCenter({ lat: lat, lng: lng });
                 map.setZoom(16);
@@ -1276,14 +1045,17 @@
         }
 
         function initAutocomplete() {
-            // 🟢 DYNAMIC SEARCH BOUNDS
-            const bounds = getBoundsForService(window.APP.service);
+            // 50KM RADIUS AROUND SALATIGA - BIAS NOT BLOCK
+            const bounds = new google.maps.LatLngBounds(
+                new google.maps.LatLng(-7.78, 110.05), // Southwest
+                new google.maps.LatLng(-6.88, 110.95)  // Northeast
+            );
 
             const options = {
                 bounds: bounds,
                 componentRestrictions: { country: "id" },
                 fields: ["geometry", "name", "formatted_address"],
-                strictBounds: true, // Restricted to service area
+                strictBounds: false, // BIAS results, don't block - prevents autocomplete lag
                 types: ['establishment', 'geocode']
             };
 
@@ -1304,16 +1076,6 @@
             const place = ac.getPlace();
             if (!place.geometry) return;
 
-            const lat = place.geometry.location.lat();
-            const lng = place.geometry.location.lng();
-
-            // 🟢 VALIDATE RADIUS
-            if (!isWithinAllowedRadius(lat, lng, window.APP.service)) {
-                alert(`Lokasi terlalu jauh! Maksimal ${window.APP.service === 'CAR' ? '150km' : '25km'} dari Salatiga.`);
-                document.getElementById(type === 'origin' ? 'origin' : 'destination').value = '';
-                return;
-            }
-
             const inputId = type === 'origin' ? 'origin' : 'destination';
             const cleaned = cleanAddress(place.formatted_address);
             document.getElementById(inputId).value = cleaned;
@@ -1321,6 +1083,8 @@
 
             // Write to central state with source tracking
             const field = type === 'origin' ? 'pickup' : 'dropoff';
+            const lat = place.geometry.location.lat();
+            const lng = place.geometry.location.lng();
 
             updateLocationState(field, lat, lng, 'autocomplete', cleaned);
             updateMarker(type, lat, lng);
@@ -1342,47 +1106,16 @@
             document.getElementById('error-card').style.display = 'none';
 
             const directionsService = new google.maps.DirectionsService();
-
-            // 🚗 CAR SERVICE: Use DRIVING mode and respect toll preference
-            const travelMode = window.APP.service === 'CAR'
-                ? google.maps.TravelMode.DRIVING
-                : google.maps.TravelMode.TWO_WHEELER;
-
-            const avoidTolls = window.APP.service === 'CAR'
-                ? !window.APP.useToll
-                : true;
-
             directionsService.route({
                 origin: origin.geometry.location,
                 destination: dest.geometry.location,
-                travelMode: travelMode,
-                avoidTolls: avoidTolls
+                travelMode: google.maps.TravelMode.TWO_WHEELER,
+                avoidTolls: true
             }, (res, status) => {
                 setLoading(false);
                 if (status === 'OK') {
                     // DISPLAY VISUAL ROUTE (BLUE LINE)
                     window.APP.directionsRenderer.setDirections(res);
-
-                    // 🗺️ FIX: Fit map to route bounds with padding (ensure complete route visible)
-                    const routeBounds = res.routes[0].bounds;
-
-                    // Apply generous padding to prevent cutoff
-                    const padding = {
-                        top: 60,
-                        right: 60,
-                        bottom: 60,
-                        left: 60
-                    };
-
-                    window.APP.map.fitBounds(routeBounds, padding);
-
-                    // Safety check: verify zoom isn't too tight
-                    setTimeout(() => {
-                        const currentZoom = window.APP.map.getZoom();
-                        if (currentZoom > 12) {
-                            window.APP.map.setZoom(currentZoom - 1);
-                        }
-                    }, 300);
 
                     const googleKm = res.routes[0].legs[0].distance.value / 1000;
 
@@ -1401,14 +1134,8 @@
 
                     window.APP.calc.distance = parseFloat(finalKm.toFixed(2));
 
-                    // 🚗 CAR SERVICE: 150km limit instead of 25km
-                    const maxDistance = window.APP.service === 'CAR' ? 150 : 25;
-                    const errorMsg = window.APP.service === 'CAR'
-                        ? `Kejauhan Boss! Max ${maxDistance}km ya.`
-                        : "Kejauhan Boss! Max 25km ya.";
-
-                    if (window.APP.calc.distance > maxDistance) {
-                        showError(errorMsg);
+                    if (window.APP.calc.distance > 25) {
+                        showError("Kejauhan Boss! Max 25km ya.");
                     } else {
                         calculatePrice(finalKm);
                     }
@@ -1436,39 +1163,26 @@
             const service = window.APP.service;
             const config = window.APP.config[service];
 
+            if (!config) return;
+
             let price = 0;
+            const tiers = config.pricing_model?.tiers || config.TIERS;
 
-            // 🚗 CAR SERVICE: Dummy pricing (until Firebase CAR_v1 config is ready)
-            if (service === 'CAR') {
-                const basePrice = window.APP.carOption === '4_SEAT' ? 25000 : 35000;
-                const perKm = window.APP.carOption === '4_SEAT' ? 3500 : 4500;
-                const chargedDistance = Math.max(distance, 5); // Minimum 5km charge
-                price = basePrice + (chargedDistance * perKm);
+            if (Array.isArray(tiers)) {
+                const tier = tiers.find(t => distance >= t.min_km && distance < t.max_km) || tiers[tiers.length - 1];
+                if (tier.calculation_type === 'FLAT') price = tier.base_price;
+                else price = tier.base_price + ((distance - tier.offset_km) * tier.price_per_km);
             }
-            // Existing pricing logic for other services
-            else if (!config) {
-                return;
-            }
-            else {
-                const tiers = config.pricing_model?.tiers || config.TIERS;
-
-                if (Array.isArray(tiers)) {
-                    const tier = tiers.find(t => distance >= t.min_km && distance < t.max_km) || tiers[tiers.length - 1];
-                    if (tier.calculation_type === 'FLAT') price = tier.base_price;
-                    else price = tier.base_price + ((distance - tier.offset_km) * tier.price_per_km);
-                }
-                else if (tiers.BASE) {
-                    const baseLimit = tiers.BASE.max_distance_km || 2;
-                    if (distance <= baseLimit) price = tiers.BASE.delivery_fee;
-                    else price = tiers.MID.base_fee + ((distance - baseLimit) * tiers.MID.price_per_km);
-                }
+            else if (tiers.BASE) {
+                const baseLimit = tiers.BASE.max_distance_km || 2;
+                if (distance <= baseLimit) price = tiers.BASE.delivery_fee;
+                else price = tiers.MID.base_fee + ((distance - baseLimit) * tiers.MID.price_per_km);
             }
 
             price = Math.ceil(price / 500) * 500;
             window.APP.calc.price = price;
 
-            // Fake price: 10% higher, rounded to nearest 500
-            const fakePrice = Math.ceil((price * 1.1) / 500) * 500;
+            const fakePrice = Math.ceil((price * 1.25) / 1000) * 1000;
             document.getElementById('fake-price').innerText = `Rp ${fakePrice.toLocaleString('id-ID')}`;
 
             document.getElementById('price-display').innerText = `Rp ${price.toLocaleString('id-ID')}`;
@@ -1503,12 +1217,6 @@
             if (window.APP.service === 'RIDE') { displayService = 'Ojek'; serviceCode = 'OJK'; }
             if (window.APP.service === 'SEND') { displayService = 'Kirim Barang'; serviceCode = 'SND'; }
             if (window.APP.service === 'FOOD_MART') { displayService = 'Food & Mart'; serviceCode = 'JST'; }
-            // 🚗 CAR SERVICE: Display service with seat type
-            if (window.APP.service === 'CAR') {
-                const seatType = window.APP.carOption === '4_SEAT' ? '4 Seat' : '6 Seat';
-                displayService = `MOBIL (${seatType})`;
-                serviceCode = 'CAR';
-            }
 
             const orderID = `${serviceCode}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
@@ -1529,13 +1237,6 @@
                 msg += `----------------\n` +
                     `Item: ${items}\n` +
                     `Est. Harga: Rp ${estPrice || 0}\n`;
-            }
-
-            // 🚗 CAR SERVICE: Add car-specific info
-            if (window.APP.service === 'CAR') {
-                msg += `----------------\n`;
-                msg += `Tipe: ${window.APP.carOption === '4_SEAT' ? 'Hatchback (4 Seat)' : 'Family (6 Seat)'}\n`;
-                msg += `Tol: ${window.APP.useToll ? 'YA (Exclude)' : 'TIDAK'}\n`;
             }
 
             msg += `----------------\n` +
@@ -1590,7 +1291,6 @@
 
             const jastipField = document.getElementById('jastip-field');
             const legalWarning = document.getElementById('legal-warning');
-            const carOptions = document.getElementById('car-options');
             const originInput = document.getElementById('origin');
             const destInput = document.getElementById('destination');
 
@@ -1602,7 +1302,6 @@
 
             jastipField.style.display = 'none';
             legalWarning.style.display = 'none';
-            carOptions.style.display = 'none';
 
             if (type === 'FOOD_MART') {
                 jastipField.style.display = 'block';
@@ -1614,12 +1313,6 @@
                 gpsOrigin.style.display = 'flex';
                 originInput.placeholder = "Ambil paket di mana?";
                 destInput.placeholder = "Kirim ke mana?";
-            } else if (type === 'CAR') {
-                // 🚗 CAR SERVICE: Show car options and update map bounds
-                carOptions.style.display = 'block';
-                gpsOrigin.style.display = 'flex';
-                originInput.placeholder = "Jemput di mana? (Alamat Lengkap)";
-                destInput.placeholder = "Tujuan ke mana?";
             } else {
                 gpsOrigin.style.display = 'flex';
                 originInput.placeholder = "Jemput di mana? (Cari Masjid/Sekolah)";
@@ -1627,12 +1320,6 @@
             }
 
             updateLink();
-
-            // 🟢 UPDATE MAP RESTRICTIONS & AUTOCOMPLETE
-            updateMapRestrictions(type);
-
-            // Re-init autocomplete to apply new search bounds
-            setTimeout(() => initAutocomplete(), 100);
         }
 
         function expandMap() {
@@ -1673,25 +1360,17 @@
 
             if (!window.APP.pickerMap) {
                 const centerSalatiga = { lat: -7.3305, lng: 110.5084 };
-
-                // 🟢 DYNAMIC PICKER BOUNDS
-                let pickerBounds;
-                if (window.APP.service === 'CAR') {
-                    pickerBounds = {
-                        north: -6.0, south: -8.5, west: 109.5, east: 111.5
-                    };
-                } else {
-                    pickerBounds = {
-                        north: -7.0, south: -7.66, west: 110.0, east: 111.0
-                    };
-                }
-
                 window.APP.pickerMap = new google.maps.Map(document.getElementById("picker-map"), {
                     center: centerSalatiga,
                     zoom: 17,
-                    minZoom: 11,
+                    minZoom: 13,
                     restriction: {
-                        latLngBounds: pickerBounds,
+                        latLngBounds: {
+                            north: -6.5,
+                            south: -8.0,
+                            west: 110.0,
+                            east: 111.5
+                        },
                         strictBounds: true
                     },
                     gestureHandling: "greedy",
