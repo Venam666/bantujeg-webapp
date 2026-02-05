@@ -128,27 +128,17 @@
 
         .tab {
             flex: 1;
-            padding: 8px;
+            padding: 12px;
             text-align: center;
             border-radius: 12px;
             font-weight: 700;
-            font-size: 0.7rem;
+            font-size: 0.9rem;
             color: #64748B;
             cursor: pointer;
             transition: all 0.2s;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .tab .tab-icon {
-            font-size: 1.2rem;
-            line-height: 1;
         }
 
         .tab.active {
@@ -369,9 +359,9 @@
             align-items: center;
             gap: 8px;
             margin-top: 10px;
-            font-size: 0.75rem;
+            font-size: 0.8rem;
             font-weight: 600;
-            color: #b45309;
+            color: #475569;
         }
 
         .price-card {
@@ -652,22 +642,10 @@
         </div>
 
         <div class="tabs">
-            <div class="tab active" onclick="setService('RIDE', this)">
-                <span class="tab-icon">🛵</span>
-                <span>OJEK</span>
-            </div>
-            <div class="tab" onclick="setService('SEND', this)">
-                <span class="tab-icon">📦</span>
-                <span>SEND</span>
-            </div>
-            <div class="tab" onclick="setService('FOOD_MART', this)">
-                <span class="tab-icon">🍜</span>
-                <span>FOOD & MART</span>
-            </div>
-            <div class="tab" onclick="setService('CAR', this)">
-                <span class="tab-icon">🚗</span>
-                <span>MOBIL</span>
-            </div>
+            <div class="tab active" onclick="setService('RIDE', this)">🛵 OJEK</div>
+            <div class="tab" onclick="setService('SEND', this)">📦 SEND</div>
+            <div class="tab" onclick="setService('FOOD_MART', this)">🍜 FOOD & MART</div>
+            <div class="tab" onclick="setService('CAR', this)">🚗 MOBIL</div>
         </div>
 
         <div class="input-group">
@@ -737,16 +715,16 @@
             <div class="option-row">
                 <label class="seat-option">
                     <input type="radio" name="car-seat" value="4" checked onchange="handleCarOptionChange()">
-                    🚗 Car
+                    4 Seat
                 </label>
                 <label class="seat-option">
                     <input type="radio" name="car-seat" value="6" onchange="handleCarOptionChange()">
-                    🚐 Car L
+                    6 Seat
                 </label>
             </div>
             <label class="toll-option">
                 <input type="checkbox" id="car-toll" onchange="handleCarOptionChange()">
-                Lewat Jalan Tol (Biaya order tidak termasuk biaya tol, parkir atau pungutan tambahan lain)
+                Lewat Tol (Biaya tol & parkir ditanggung penumpang)
             </label>
         </div>
 
@@ -797,6 +775,85 @@
     <script
         src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAXo3ErccnWYzKPXZsli1j9zsE5_50hO1g&libraries=places,geometry&loading=async"></script>
 
+    <!-- Firebase SDK -->
+    <script type="module">
+        // ========================
+        // 🔥 FIREBASE CONFIGURATION
+        // ========================
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js';
+        import { getFirestore, doc, getDoc } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
+
+        // 🎯 PRODUCTION FIREBASE CONFIG (gen-lang-client-0674280520)
+        const firebaseConfig = {
+            apiKey: "AIzaSyDwbtq81niH-J_a8N_VS0gAEehuBUCrNWM",
+            authDomain: "gen-lang-client-0674280520.firebaseapp.com",
+            projectId: "gen-lang-client-0674280520",
+            storageBucket: "gen-lang-client-0674280520.firebasestorage.app",
+            messagingSenderId: "422725955268",
+            appId: "1:422725955268:web:d8b1eba575e6ed87342391",
+            measurementId: "G-CK7JEKCS46"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // ========================
+        // 📋 LOAD PRICING CONFIGS
+        // ========================
+        async function loadConfigs() {
+            try {
+                // 🚨 CRITICAL: Document IDs MUST match backend seeder (seed-master-data.js)
+                // NO "_v1" suffix - backend writes as: RIDE, SEND, FOOD_MART, CAR
+                const configPromises = [
+                    getDoc(doc(db, 'pricing_configs', 'RIDE')),
+                    getDoc(doc(db, 'pricing_configs', 'SEND')),
+                    getDoc(doc(db, 'pricing_configs', 'FOOD_MART')),
+                    getDoc(doc(db, 'pricing_configs', 'CAR'))
+                ];
+
+                const [rideSnap, sendSnap, foodSnap, carSnap] = await Promise.all(configPromises);
+
+                if (rideSnap.exists()) {
+                    window.APP.config.RIDE = rideSnap.data();
+                    console.log('✅ Loaded RIDE config');
+                }
+
+                if (sendSnap.exists()) {
+                    window.APP.config.SEND = sendSnap.data();
+                    console.log('✅ Loaded SEND config');
+                }
+
+                if (foodSnap.exists()) {
+                    window.APP.config.FOOD_MART = foodSnap.data();
+                    console.log('✅ Loaded FOOD_MART config');
+                }
+
+                if (carSnap.exists()) {
+                    window.APP.config.CAR = carSnap.data();
+                    console.log('✅ Loaded CAR config');
+                }
+
+                console.log('🎯 All pricing configs loaded from production Firestore');
+            } catch (error) {
+                console.error('❌ Failed to load pricing configs:', error);
+                // Fallback: app will continue with null configs (will show errors in UI)
+            }
+        }
+
+        // ========================
+        // 🚀 AUTO-LOAD ON PAGE READY
+        // ========================
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', loadConfigs);
+        } else {
+            loadConfigs();
+        }
+
+        // Expose for debugging
+        window.FIREBASE_DB = db;
+    </script>
+
     <script>
         // 🎯 CENTRAL LOCATION STATE - Final Authority after commit
         window.locationState = {
@@ -825,68 +882,16 @@
         };
     </script>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyAekghf6Oydh17aYc_ia1zy3oNDsFK4aww",
-            authDomain: "tanganbantu-poc.firebaseapp.com",
-            projectId: "tanganbantu-poc",
-            storageBucket: "tanganbantu-poc.firebasestorage.app",
-            messagingSenderId: "236145821183",
-            appId: "1:236145821183:web:c390d511bf9da9a86913ca"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-
-        async function loadConfigs() {
-            try {
-                const [rideSnap, foodSnap, sendSnap] = await Promise.all([
-                    getDoc(doc(db, 'pricing_configs', 'RIDE_v1')),
-                    getDoc(doc(db, 'pricing_configs', 'FOOD_MART_v1')),
-                    getDoc(doc(db, 'pricing_configs', 'SEND_v1'))
-                ]);
-
-                if (rideSnap.exists()) window.APP.config.RIDE = rideSnap.data();
-                if (foodSnap.exists()) window.APP.config.FOOD_MART = foodSnap.data();
-                if (sendSnap.exists()) window.APP.config.SEND = sendSnap.data();
-                console.log("✅ CONFIG LOADED");
-            } catch (e) {
-                console.error("❌ Config Error:", e);
-            }
-        }
-        loadConfigs();
-
-        async function loadCarConfig() {
-            try {
-                const carSnap = await getDoc(doc(db, 'pricing_configs', 'CAR_v1'));
-                if (carSnap.exists()) window.APP.config.CAR = carSnap.data();
-            } catch (e) {
-                console.error("❌ Car Config Error:", e);
-            }
-        }
-        loadCarConfig();
-    </script>
 
     <script>
         const CONFIG_WA = "62895330091464";
-
-        const CENTRAL_JAVA_BOUNDS = {
-            north: -6.4,
-            south: -8.2,
-            west: 109.0,
-            east: 111.8
-        };
 
         function getServiceMapSettings(service) {
             const centerSalatiga = { lat: -7.3305, lng: 110.5084 };
             const isCar = service === 'CAR';
             return {
                 center: centerSalatiga,
-                zoom: isCar ? 10 : 13,
-                minZoom: isCar ? 9 : 12
+                zoom: isCar ? 10 : 13
             };
         }
 
@@ -896,11 +901,6 @@
             window.APP.map = new google.maps.Map(document.getElementById("map"), {
                 center: mapSettings.center,
                 zoom: mapSettings.zoom,
-                minZoom: mapSettings.minZoom,
-                restriction: {
-                    latLngBounds: CENTRAL_JAVA_BOUNDS,
-                    strictBounds: false
-                },
                 gestureHandling: "greedy",
                 disableDefaultUI: true,
                 clickableIcons: false,
@@ -1370,7 +1370,7 @@
             }
 
             if (window.APP.service === 'CAR') {
-                const seatLabel = window.APP.carOptions.seats === 6 ? 'Car L' : 'Car';
+                const seatLabel = window.APP.carOptions.seats === 6 ? '6 Seat' : '4 Seat';
                 const tollLabel = window.APP.carOptions.toll ? 'Yes' : 'No';
                 msg += `----------------\n` +
                     `[${seatLabel}]\n` +
@@ -1471,15 +1471,8 @@
 
             const mapSettings = getServiceMapSettings(type);
             if (window.APP.map) {
-                window.APP.map.setOptions({
-                    center: mapSettings.center,
-                    zoom: mapSettings.zoom,
-                    minZoom: mapSettings.minZoom,
-                    restriction: {
-                        latLngBounds: CENTRAL_JAVA_BOUNDS,
-                        strictBounds: false
-                    }
-                });
+                window.APP.map.setCenter(mapSettings.center);
+                window.APP.map.setZoom(mapSettings.zoom);
             }
 
             updateLink();
