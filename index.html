@@ -128,17 +128,20 @@
 
         .tab {
             flex: 1;
-            padding: 12px;
+            padding: 8px;
             text-align: center;
             border-radius: 12px;
             font-weight: 700;
-            font-size: 0.9rem;
+            font-size: 0.75rem;
             color: #64748B;
             cursor: pointer;
             transition: all 0.2s;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            white-space: normal;
+            line-height: 1.2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 48px;
         }
 
         .tab.active {
@@ -679,8 +682,8 @@
         <div class="input-group">
             <div class="input-wrapper">
                 <span class="input-icon">📝</span>
-                <input type="text" id="note" placeholder="Catatan (Pagar hitam, dll)"
-                    oninput="updateLink(); toggleClearBtn('note')">
+                <textarea id="note" rows="2" style="resize: none; height: auto;"
+                    placeholder="Catatan (Pagar hitam, dll)" oninput="updateLink(); toggleClearBtn('note')"></textarea>
                 <div class="clear-btn" id="clear-note" onclick="clearInput('note')">✕</div>
             </div>
             <div class="note-chips">
