@@ -184,6 +184,13 @@
             padding-right: 48px;
         }
 
+        #note {
+            resize: none;
+            overflow-y: auto;
+            min-height: 50px;
+            max-height: 120px;
+        }
+
         input:focus {
             border-color: var(--primary);
             background: white;
@@ -682,8 +689,8 @@
         <div class="input-group">
             <div class="input-wrapper">
                 <span class="input-icon">📝</span>
-                <textarea id="note" rows="2" style="resize: none; height: auto;"
-                    placeholder="Catatan (Pagar hitam, dll)" oninput="updateLink(); toggleClearBtn('note')"></textarea>
+                <textarea id="note" rows="1" placeholder="Catatan (Pagar hitam, dll)"
+                    oninput="updateLink(); toggleClearBtn('note')"></textarea>
                 <div class="clear-btn" id="clear-note" onclick="clearInput('note')">✕</div>
             </div>
             <div class="note-chips">
@@ -848,9 +855,24 @@
         // 🚀 AUTO-LOAD ON PAGE READY
         // ========================
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', loadConfigs);
+            document.addEventListener('DOMContentLoaded', () => {
+                loadConfigs();
+                initNoteAutoResize();
+            });
         } else {
             loadConfigs();
+            initNoteAutoResize();
+        }
+
+        function initNoteAutoResize() {
+            const noteInput = document.getElementById('note');
+            if (!noteInput) return;
+
+            noteInput.addEventListener('input', function () {
+                this.style.height = 'auto'; // Reset height
+                this.style.height = (this.scrollHeight) + 'px'; // Set to content height
+                if (this.value === '') this.style.height = ''; // Reset on empty
+            });
         }
 
         // Expose for debugging
@@ -951,7 +973,13 @@
 
             document.getElementById('origin').value = data.origin_addr;
             document.getElementById('destination').value = data.dest_addr;
-            if (data.note) document.getElementById('note').value = data.note;
+            if (data.note) {
+                const noteInput = document.getElementById('note');
+                noteInput.value = data.note;
+                // Trigger auto-resize manually
+                noteInput.style.height = 'auto';
+                noteInput.style.height = (noteInput.scrollHeight) + 'px';
+            }
 
             window.APP.places.origin = {
                 geometry: { location: new google.maps.LatLng(data.origin_lat, data.origin_lng) },
@@ -977,6 +1005,9 @@
             } else {
                 noteInput.value = text;
             }
+            // Trigger auto-resize
+            noteInput.style.height = 'auto';
+            noteInput.style.height = (noteInput.scrollHeight) + 'px';
             updateLink();
             toggleClearBtn('note');
         }
