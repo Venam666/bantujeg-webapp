@@ -1206,66 +1206,111 @@
             calculateRoute();
         }
 
-        function calculateRoute() {
-            const { origin, dest } = window.APP.places;
-            const originVal = document.getElementById('origin').value.trim();
-            const destVal = document.getElementById('destination').value.trim();
+        async function calculateRoute() {
+            const origin = window.APP.places.origin;
+            const dest = window.APP.places.dest; // Changed from .destination to .dest to match APP.places structure
 
-            if (!origin || !dest || originVal === '' || destVal === '') {
-                window.APP.calc.price = 0;
-                updateLink();
+            if (!origin || !dest) {
+                showError("Mohon isi lokasi jemput dan tujuan dulu ya Kak! 🙏");
                 return;
             }
 
+            // ==========================================
+            // 🛡️ PAGAR GHAIB: CEK TITIK JEMPUT (PICKUP)
+            // ==========================================
+            const SALATIGA_CENTER = { lat: -7.3305, lng: 110.5084 }; // Alun-alun Pancasila
+
+            // Hitung jarak dari Pusat Salatiga ke Titik Jemput User
+            const distFromBase = google.maps.geometry.spherical.computeDistanceBetween(
+                origin.geometry.location,
+                new google.maps.LatLng(SALATIGA_CENTER.lat, SALATIGA_CENTER.lng)
+            ) / 1000; // Convert ke KM
+
+            // BATASAN: Driver cuma mau jemput max 15km dari pusat kota
+            if (distFromBase > 15) {
+                showError("Mohon maaf Kak, saat ini armada kami hanya melayani penjemputan di area Salatiga & Sekitarnya. 🙏");
+                return; // ⛔ STOP PROSES
+            }
+            // ==========================================
+
             setLoading(true);
-            document.getElementById('error-card').style.display = 'none';
+            document.getElementById('error-card').style.display = 'none'; // Clear previous errors
+
+            // Get current service config
+            const serviceKey = window.APP.service;
+            const config = window.APP.config[serviceKey];
+            const maxDistance = config ? config.max_distance_km || 30 : 30; // Default fallback
 
             const isCar = window.APP.service === 'CAR';
             const travelMode = isCar ? google.maps.TravelMode.DRIVING : google.maps.TravelMode.TWO_WHEELER;
             const tollAllowed = window.APP.carOptions.toll;
 
             const directionsService = new google.maps.DirectionsService();
-            directionsService.route({
+            const request = {
                 origin: origin.geometry.location,
                 destination: dest.geometry.location,
                 travelMode: travelMode,
                 avoidTolls: !tollAllowed
-            }, (res, status) => {
+            };
+
+            directionsService.route(request, function (result, status) {
                 setLoading(false);
-                if (status === 'OK') {
-                    // DISPLAY VISUAL ROUTE (BLUE LINE)
-                    window.APP.directionsRenderer.setDirections(res);
-                    if (res.routes[0]?.bounds) {
-                        window.APP.map.fitBounds(res.routes[0].bounds, { padding: 60 });
+
+                if (status === google.maps.DirectionsStatus.OK) {
+                    window.APP.directionsRenderer.setDirections(result);
+                    if (result.routes[0]?.bounds) {
+                        window.APP.map.fitBounds(result.routes[0].bounds, { padding: 60 });
                     }
 
-                    const googleKm = res.routes[0].legs[0].distance.value / 1000;
+                    // Get distance & duration
+                    const leg = result.routes[0].legs[0];
+                    const distanceKm = leg.distance.value / 1000;
+                    const durationMins = Math.ceil(leg.duration.value / 60);
 
-                    const straightKm = google.maps.geometry.spherical.computeDistanceBetween(
-                        res.routes[0].legs[0].start_location,
-                        res.routes[0].legs[0].end_location
-                    ) / 1000;
-
-                    const configService = window.APP.config[window.APP.service] || window.APP.config.RIDE || {};
-                    const logic = configService.distance_logic || { lmf: 1.25, detour_limit: 1.15 };
-
-                    let finalKm = googleKm;
+                    // Apply motor estimate logic if not car
+                    let finalKm = distanceKm;
                     if (!isCar) {
+                        const straightKm = google.maps.geometry.spherical.computeDistanceBetween(
+                            leg.start_location,
+                            leg.end_location
+                        ) / 1000;
+                        const configService = window.APP.config[window.APP.service] || window.APP.config.RIDE || {};
+                        const logic = configService.distance_logic || { lmf: 1.25, detour_limit: 1.15 };
                         const motorEstimate = straightKm * logic.lmf;
-                        if (googleKm > motorEstimate * logic.detour_limit) finalKm = motorEstimate;
-                        else if (googleKm < straightKm * 1.05) finalKm = straightKm * 1.10;
+                        if (distanceKm > motorEstimate * logic.detour_limit) finalKm = motorEstimate;
+                        else if (distanceKm < straightKm * 1.05) finalKm = straightKm * 1.10;
                     }
 
-                    window.APP.calc.distance = parseFloat(finalKm.toFixed(2));
+                    window.APP.calc = {
+                        distance: parseFloat(finalKm.toFixed(2)),
+                        duration: durationMins
+                    };
 
-                    const maxDistance = isCar ? 150 : 30;
+                    // Display Distance
+                    document.getElementById('dist-display').innerText = `${window.APP.calc.distance.toFixed(1)} km (${durationMins} mnt)`;
+
+                    // Check Max Distance
                     if (window.APP.calc.distance > maxDistance) {
-                        showError(`Kejauhan Boss! Max ${maxDistance}km ya.`);
+                        // GANTI KATA-KATA DI SINI
+                        showError(`Maaf Kak, jarak pengantaran melebihi batas operasional kami (${maxDistance}km). 🙏`);
+                        window.APP.calc.price = 0;
                     } else {
                         calculatePrice(finalKm);
                     }
+
+                    // Show Pricing UI
+                    document.getElementById('price-card').style.display = 'flex';
+                    document.getElementById('btn-submit').classList.remove('disabled');
+                    document.getElementById('btn-text').innerText = "Pesan Sekarang via WA";
+
+                    // Trigger update link
+                    updateLink();
+
                 } else {
-                    // Directions failed silently - avoid console spam
+                    showError("Waduh, rute tidak ditemukan. Coba geser titiknya dikit ya Kak! 🗺️");
+                    window.APP.calc.price = 0;
+                    document.getElementById('price-card').style.display = 'none';
+                    updateLink();
                 }
             });
         }
