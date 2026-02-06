@@ -5,6 +5,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#ffffff">
+
+    <!-- Security Headers -->
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://maps.googleapis.com https://www.gstatic.com https://cdn-icons-png.flaticon.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' https://maps.googleapis.com https://firestore.googleapis.com https://www.gstatic.com https://www.googleapis.com; frame-src 'none'; object-src 'none'; base-uri 'self';">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <meta http-equiv="Permissions-Policy" content="geolocation=(self), camera=(), microphone=(), payment=()">
+
+    <!-- Performance Optimization -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://maps.googleapis.com" crossorigin>
+    <link rel="dns-prefetch" href="https://www.gstatic.com">
+    <link rel="dns-prefetch" href="https://firestore.googleapis.com">
+    <link rel="dns-prefetch" href="https://cdn-icons-png.flaticon.com">
+
     <title>BantuJeg - Order Cepat</title>
 
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
@@ -662,8 +679,10 @@
             <div class="input-wrapper" id="wrapper-origin">
                 <span class="input-icon">📍</span>
                 <input type="text" id="origin" placeholder="Jemput di mana? (Cari Masjid/Sekolah)"
-                    onfocus="setActiveField('pickup'); expandMap()" oninput="handleInput('origin')">
-                <div class="clear-btn" id="clear-origin" onclick="clearInput('origin')">✕</div>
+                    onfocus="setActiveField('pickup'); expandMap()" oninput="handleInput('origin')"
+                    aria-label="Lokasi penjemputan" autocomplete="off">
+                <div class="clear-btn" id="clear-origin" onclick="clearInput('origin')" role="button" tabindex="0"
+                    aria-label="Hapus lokasi penjemputan">✕</div>
             </div>
             <div class="input-actions" id="actions-origin">
                 <div class="action-btn map-picker" onclick="openMapPicker('origin')">🗺️ Pilih lewat peta</div>
@@ -676,8 +695,9 @@
             <div class="input-wrapper" id="wrapper-destination">
                 <span class="input-icon">🏁</span>
                 <input type="text" id="destination" placeholder="Antar ke mana?" onfocus="setActiveField('dropoff')"
-                    oninput="handleInput('destination')">
-                <div class="clear-btn" id="clear-destination" onclick="clearInput('destination')">✕</div>
+                    oninput="handleInput('destination')" aria-label="Lokasi tujuan" autocomplete="off">
+                <div class="clear-btn" id="clear-destination" onclick="clearInput('destination')" role="button"
+                    tabindex="0" aria-label="Hapus lokasi tujuan">✕</div>
             </div>
             <div class="input-actions" id="actions-destination">
                 <div class="action-btn map-picker" onclick="openMapPicker('destination')">🗺️ Pilih lewat peta</div>
@@ -690,8 +710,10 @@
             <div class="input-wrapper">
                 <span class="input-icon">📝</span>
                 <textarea id="note" rows="1" placeholder="Catatan (Pagar hitam, dll)"
-                    oninput="updateLink(); toggleClearBtn('note')"></textarea>
-                <div class="clear-btn" id="clear-note" onclick="clearInput('note')">✕</div>
+                    oninput="updateLink(); toggleClearBtn('note')" aria-label="Catatan tambahan"
+                    autocomplete="off"></textarea>
+                <div class="clear-btn" id="clear-note" onclick="clearInput('note')" role="button" tabindex="0"
+                    aria-label="Hapus catatan">✕</div>
             </div>
             <div class="note-chips">
                 <div class="chip" onclick="addNote('Uang Pas')">Uang Pas</div>
@@ -709,13 +731,15 @@
             <div class="input-group">
                 <div class="input-wrapper">
                     <span class="input-icon">🛒</span>
-                    <textarea id="items" rows="2" placeholder="List belanjaan..." oninput="updateLink()"></textarea>
+                    <textarea id="items" rows="2" placeholder="List belanjaan..." oninput="updateLink()"
+                        aria-label="Daftar belanjaan" autocomplete="off"></textarea>
                 </div>
             </div>
             <div class="input-group">
                 <div class="input-wrapper">
                     <span class="input-icon">💰</span>
-                    <input type="number" id="est-price" placeholder="Estimasi harga barang (Rp)" oninput="updateLink()">
+                    <input type="number" id="est-price" placeholder="Estimasi harga barang (Rp)" oninput="updateLink()"
+                        aria-label="Estimasi harga barang" autocomplete="off">
                 </div>
             </div>
         </div>
@@ -782,7 +806,7 @@
         </div>
     </div>
 
-    <script
+    <script async
         src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAXo3ErccnWYzKPXZsli1j9zsE5_50hO1g&libraries=places,geometry&loading=async"></script>
 
     <!-- Firebase SDK -->
@@ -1273,7 +1297,13 @@
             // Get current service config
             const serviceKey = window.APP.service;
             const config = window.APP.config[serviceKey];
-            const maxDistance = config ? config.max_distance_km || 30 : 30; // Default fallback
+
+            // ✅ FIX: Set limit 150km for CAR, 30km for others
+            let defaultLimit = 30;
+            if (serviceKey === 'CAR') defaultLimit = 150;
+
+            // Use backend config if exists, otherwise use strict default
+            const maxDistance = config ? (config.max_distance_km || defaultLimit) : defaultLimit;
 
             const isCar = window.APP.service === 'CAR';
             const travelMode = isCar ? google.maps.TravelMode.DRIVING : google.maps.TravelMode.TWO_WHEELER;
