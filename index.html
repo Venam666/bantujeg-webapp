@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BantuJeg - Order Cepat</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="./css/style.css">
+    <style>
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- TASK 2: Beautified Login View -->
+    <div id="view-login" class="card-interface"
+        style="display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 100vh; background: #f8fafc;">
+        <div style="text-align: center; margin-bottom: 32px;">
+            <div class="brand-name" style="font-size: 2.5rem; color: #10B981;">BantuJeg.</div>
+            <div class="greeting" style="font-size: 1rem; margin-top: 8px;">Login cepat tanpa password 🚀</div>
+        </div>
+        <div class="input-group"
+            style="width: 100%; max-width: 400px; background: white; padding: 24px; border-radius: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.05);">
+            <label
+                style="font-size: 0.85rem; font-weight: 700; color: #64748B; margin-bottom: 8px; display: block;">Nomor
+                WhatsApp</label>
+            <div class="input-wrapper">
+                <span class="input-icon">📱</span>
+                <input type="tel" id="login-phone" placeholder="Contoh: 0895xxxx"
+                    style="width: 100%; padding: 16px 16px 16px 48px; border: 2px solid #E2E8F0; border-radius: 16px; font-size: 1rem; font-family: 'Plus Jakarta Sans', sans-serif; outline: none; transition: border 0.3s;"
+                    onfocus="this.style.borderColor='#10B981'" onblur="this.style.borderColor='#E2E8F0'">
+            </div>
+            <button id="btn-request-login" class="btn-cta" style="margin-top: 20px; width: 100%; cursor: pointer;">
+                <span id="login-btn-text">Kirim Link Login</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- MAIN APP PLACEHOLDER (Preserved) -->
+    <div id="view-main" class="hidden">
+        <h2 style="padding: 20px;">Berhasil Login! UI Legacy akan dirender di sini.</h2>
+    </div>
+
+    <!-- TASK 1: Static Init -->
+    <script>
+        window.APP = window.APP || {};
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        window.APP.api = {
+            baseUrl: isLocal ? 'http://localhost:8080' : 'https://tanganbantu-backend-422725955268.asia-southeast2.run.app'
+        };
+        window.APP.auth = {};
+        window.APP.session = {};
+    </script>
+
+    <script type="module" src="./js/session.js"></script>
+    <script type="module" src="./js/auth.js"></script>
+
+    <script type="module">
+        document.addEventListener('DOMContentLoaded', async () => {
+            console.log("🚀 Booting BantuJeg...");
+
+            // 1. Check URL Token
+            if (window.APP.auth && window.APP.auth.checkUrlForToken) {
+                await window.APP.auth.checkUrlForToken();
+            }
+
+            // 2. Check Session
+            if (window.APP.session && window.APP.session.isAuthenticated && window.APP.session.isAuthenticated()) {
+                document.getElementById('view-login').style.display = 'none';
+                document.getElementById('view-login').classList.add('hidden');
+                document.getElementById('view-main').classList.remove('hidden');
+            } else {
+                document.getElementById('view-main').classList.add('hidden');
+                document.getElementById('view-login').style.display = 'flex';
+                document.getElementById('view-login').classList.remove('hidden');
+            }
+
+            // 3. Bind Login Button
+            const btn = document.getElementById('btn-request-login');
+            if (btn) {
+                btn.addEventListener('click', () => {
+                    const phone = document.getElementById('login-phone').value;
+                    if (!phone) { alert("Nomor HP wajib diisi"); return; }
+
+                    if (window.APP.auth && window.APP.auth.requestMagicLink) {
+                        window.APP.auth.requestMagicLink(phone);
+                    } else {
+                        alert("Auth module failed to load.");
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+
+</html>
