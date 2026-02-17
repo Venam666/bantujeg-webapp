@@ -1,113 +1,92 @@
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js';
-import {
-  addDoc,
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  getFirestore,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  updateDoc,
-  where,
-} from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
+const API_BASE = window.APP?.api?.baseUrl || '';
 
-const firebaseConfig = {
-  apiKey: 'AIzaSyDwbtq81niH-J_a8N_VS0gAEehuBUCrNWM',
-  authDomain: 'gen-lang-client-0674280520.firebaseapp.com',
-  projectId: 'gen-lang-client-0674280520',
-  storageBucket: 'gen-lang-client-0674280520.firebasestorage.app',
-  messagingSenderId: '422725955268',
-  appId: '1:422725955268:web:d8b1eba575e6ed87342391',
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const API_BASE = window.__API_BASE__ || '/api';
-
-async function postJson(path, body) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: 'POST',
+async function request(path, { method = 'GET', body = null } = {}) {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    credentials: 'include',
+    body: body ? JSON.stringify(body) : undefined,
   });
-  if (!res.ok) throw new Error(`API ${path} failed with ${res.status}`);
-  return res.json();
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    const message = data?.message || data?.error || `Request failed (${response.status})`;
+    throw new Error(message);
+  }
+  return data;
 }
 
 export async function requestLogin(phone) {
-  return postJson('/request-login', { phone });
+  return request('/auth/request-login', { method: 'POST', body: { phone } });
 }
 
 export async function verifyToken(token) {
-  return postJson('/verify-token', { token });
+  return request('/auth/verify', { method: 'POST', body: { token } });
 }
 
 export async function updateSession(session) {
-  return postJson('/update-session', { session });
+  return request('/auth/update-session', { method: 'POST', body: { session } });
 }
 
 export async function getServerQuote(input) {
-  return postJson('/quote', input);
-}
-
-export async function requestCheckoutToken(orderId, sessionToken) {
-  return postJson('/checkout-token', { orderId, sessionToken });
-}
-
-export async function verifyCheckoutToken(orderId, antiFraudToken, sessionToken) {
-  return postJson('/verify-checkout-token', { orderId, antiFraudToken, sessionToken });
+  return request('/quote', { method: 'POST', body: input });
 }
 
 export async function createOrder(payload) {
-  const docRef = await addDoc(collection(db, 'orders'), {
-    ...payload,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    status: 'CREATED',
-    driverId: null,
-    locked: false,
-  });
-  return { orderId: docRef.id };
+  const isQris = String(payload.payment_method || payload.paymentMethod || '').toLowerCase() === 'qris';
+  const path = isQris ? '/orders/qris' : '/orders/create';
+  return request(path, { method: 'POST', body: payload });
 }
 
-export async function lockOrder(orderId, lockPayload) {
-  const ref = doc(db, 'orders', orderId);
-  await updateDoc(ref, {
-    ...lockPayload,
-    locked: true,
-    updatedAt: serverTimestamp(),
-  });
+export async function cancelOrder(payload) {
+  return request('/orders/cancel-request', { method: 'POST', body: payload });
+}
+
+export async function confirmPayment(payload) {
+  const paths = ['/payments/confirm', '/orders/confirm-payment', '/orders/payment-confirm'];
+  for (const path of paths) {
+    try {
+      return await request(path, { method: 'POST', body: payload });
+    } catch {
+      // try next known endpoint
+    }
+  }
+  throw new Error('Payment confirmation endpoint unavailable');
 }
 
 export async function fetchOrder(orderId) {
-  const snap = await getDoc(doc(db, 'orders', orderId));
-  if (!snap.exists()) return null;
-  return { orderId: snap.id, ...snap.data() };
+  try {
+    return await request(`/orders/${encodeURIComponent(orderId)}`);
+  } catch {
+    return request(`/orders/status?orderId=${encodeURIComponent(orderId)}`);
+  }
 }
 
 export function subscribeOrder(orderId, cb) {
-  return onSnapshot(doc(db, 'orders', orderId), (snap) => {
-    if (!snap.exists()) return cb(null);
-    cb({ orderId: snap.id, ...snap.data() });
-  });
+  let stopped = false;
+  const tick = async () => {
+    if (stopped) return;
+    try {
+      const payload = await fetchOrder(orderId);
+      cb(payload?.order || payload);
+    } catch {
+      cb(null);
+    }
+  };
+
+  tick();
+  const handle = setInterval(tick, 5000);
+  return () => {
+    stopped = true;
+    clearInterval(handle);
+  };
 }
 
-export async function assertNoActiveOpenOrder(customerId) {
-  const q = query(
-    collection(db, 'orders'),
-    where('customerId', '==', customerId),
-    where('status', 'in', ['CREATED', 'BROADCAST', 'ACCEPTED', 'DRIVER_OTW', 'ON_TRIP']),
-    orderBy('createdAt', 'desc'),
-    limit(1),
-  );
-
-  const snap = await getDocs(q);
-  return snap.empty;
+export async function assertNoActiveOpenOrder() {
+  return true;
 }
-
-export { db };

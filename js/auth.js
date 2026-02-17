@@ -13,6 +13,9 @@ window.APP.auth.requestMagicLink = async function (phone) {
 
   try {
     const baseUrl = window.APP.api ? window.APP.api.baseUrl : ''; // Fallback empty if not set, but it should be set
+    if (window.APP.session && window.APP.session.setIdentity) {
+      window.APP.session.setIdentity(phone);
+    }
 
     const res = await fetch(`${baseUrl}/auth/request-login`, {
       method: 'POST',

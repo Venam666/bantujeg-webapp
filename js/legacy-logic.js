@@ -1,77 +1,13 @@
-// ========================
-// 🔥 FIREBASE CONFIGURATION
-// ========================
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js';
-import { getFirestore, doc, getDoc } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
-
-// 🎯 PRODUCTION FIREBASE CONFIG (gen-lang-client-0674280520)
-const firebaseConfig = {
-    apiKey: "AIzaSyDwbtq81niH-J_a8N_VS0gAEehuBUCrNWM",
-    authDomain: "gen-lang-client-0674280520.firebaseapp.com",
-    projectId: "gen-lang-client-0674280520",
-    storageBucket: "gen-lang-client-0674280520.firebasestorage.app",
-    messagingSenderId: "422725955268",
-    appId: "1:422725955268:web:d8b1eba575e6ed87342391",
-    measurementId: "G-CK7JEKCS46"
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-
-// ========================
-// 📋 LOAD PRICING CONFIGS
-// ========================
-async function loadConfigs() {
-    try {
-        // 🚨 CRITICAL: Document IDs MUST match backend seeder (seed-master-data.js)
-        // NO "_v1" suffix - backend writes as: RIDE, SEND, FOOD_MART, CAR
-        const configPromises = [
-            getDoc(doc(db, 'pricing_configs', 'RIDE')),
-            getDoc(doc(db, 'pricing_configs', 'SEND')),
-            getDoc(doc(db, 'pricing_configs', 'FOOD_MART')),
-            getDoc(doc(db, 'pricing_configs', 'CAR'))
-        ];
-
-        const [rideSnap, sendSnap, foodSnap, carSnap] = await Promise.all(configPromises);
-
-        if (rideSnap.exists()) {
-            window.APP.config.RIDE = rideSnap.data();
-            console.log('✅ Loaded RIDE config');
-        }
-
-        if (sendSnap.exists()) {
-            window.APP.config.SEND = sendSnap.data();
-            console.log('✅ Loaded SEND config');
-        }
-
-        if (foodSnap.exists()) {
-            window.APP.config.FOOD_MART = foodSnap.data();
-            console.log('✅ Loaded FOOD_MART config');
-        }
-
-        if (carSnap.exists()) {
-            window.APP.config.CAR = carSnap.data();
-            console.log('✅ Loaded CAR config');
-        }
-
-        console.log('🎯 All pricing configs loaded from production Firestore');
-    } catch (error) {
-        console.error('❌ Failed to load pricing configs:', error);
-        // Fallback: app will continue with null configs (will show errors in UI)
-    }
-}
+import { runtimeUI } from './runtime/ui-controller.js';
 
 // ========================
 // 🚀 AUTO-LOAD ON PAGE READY
 // ========================
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
-        loadConfigs();
         initNoteAutoResize();
     });
 } else {
-    loadConfigs();
     initNoteAutoResize();
 }
 
@@ -87,7 +23,6 @@ function initNoteAutoResize() {
 }
 
 // Expose for debugging
-window.FIREBASE_DB = db;
 
 
 // 🎯 CENTRAL LOCATION STATE - Final Authority after commit
@@ -99,7 +34,6 @@ window.locationState = {
 // 🎯 CENTRAL APP STATE - MERGE with existing (auth, session)
 window.APP = Object.assign(window.APP || {}, {
     service: 'RIDE',
-    config: { RIDE: null, FOOD_MART: null, SEND: null, CAR: null },
     places: { origin: null, dest: null }, // Legacy compatibility
     calc: { distance: 0, price: 0 },
     map: null,
@@ -116,9 +50,7 @@ window.APP = Object.assign(window.APP || {}, {
         geocodeRequest: null
     }
 });
-Object.seal(window.APP.config); // Prevent adding new keys
 
-const CONFIG_WA = "62895330091464";
 
 function getServiceMapSettings(service) {
     const centerSalatiga = { lat: -7.3305, lng: 110.5084 };
@@ -248,6 +180,8 @@ function updateLocationState(field, lat, lng, source, address) {
         geometry: { location: new google.maps.LatLng(lat, lng) },
         formatted_address: address
     };
+
+    runtimeUI.onLocationChanged(window.locationState.pickup, window.locationState.dropoff);
 }
 
 window.handleInput = function (id) {
@@ -458,118 +392,117 @@ function handlePlaceSelect(type, ac) {
 
 
 async function calculateRoute() {
-    const origin = window.APP.places.origin;
-    const dest = window.APP.places.dest; // Changed from .destination to .dest to match APP.places structure
+    return window.__APP_SAFE_CALL(async () => {
+        const origin = window.APP.places.origin;
+        const dest = window.APP.places.dest;
 
-    if (!origin || !dest) {
-        showError("Mohon isi lokasi jemput dan tujuan dulu ya Kak! 🙏");
-        return;
-    }
-
-    // ==========================================
-    // 🛡️ PAGAR GHAIB: CEK TITIK JEMPUT (PICKUP)
-    // ==========================================
-    const SALATIGA_CENTER = { lat: -7.3305, lng: 110.5084 }; // Alun-alun Pancasila
-
-    // Hitung jarak dari Pusat Salatiga ke Titik Jemput User
-    const distFromBase = google.maps.geometry.spherical.computeDistanceBetween(
-        origin.geometry.location,
-        new google.maps.LatLng(SALATIGA_CENTER.lat, SALATIGA_CENTER.lng)
-    ) / 1000; // Convert ke KM
-
-    // BATASAN: Driver cuma mau jemput max 15km dari pusat kota
-    if (distFromBase > 15) {
-        showError("Mohon maaf Kak, saat ini armada kami hanya melayani penjemputan di area Salatiga & Sekitarnya. 🙏");
-        return; // ⛔ STOP PROSES
-    }
-    // ==========================================
-
-    setLoading(true);
-    document.getElementById('error-card').style.display = 'none'; // Clear previous errors
-
-    // Get current service config
-    const serviceKey = window.APP.service;
-    const config = window.APP.config[serviceKey];
-
-    // ✅ FIX: Set limit 150km for CAR, 30km for others
-    let defaultLimit = 30;
-    if (serviceKey === 'CAR') defaultLimit = 150;
-
-    // Use backend config if exists, otherwise use strict default
-    const maxDistance = config ? (config.max_distance_km || defaultLimit) : defaultLimit;
-
-    const isCar = window.APP.service === 'CAR';
-    const travelMode = isCar ? google.maps.TravelMode.DRIVING : google.maps.TravelMode.TWO_WHEELER;
-    const tollAllowed = window.APP.carOptions.toll;
-
-    const directionsService = new google.maps.DirectionsService();
-    const request = {
-        origin: origin.geometry.location,
-        destination: dest.geometry.location,
-        travelMode: travelMode,
-        avoidTolls: !tollAllowed
-    };
-
-    directionsService.route(request, function (result, status) {
-        setLoading(false);
-
-        if (status === google.maps.DirectionsStatus.OK) {
-            window.APP.directionsRenderer.setDirections(result);
-            if (result.routes[0]?.bounds) {
-                window.APP.map.fitBounds(result.routes[0].bounds, { padding: 60 });
-            }
-
-            // Get distance & duration
-            const leg = result.routes[0].legs[0];
-            const distanceKm = leg.distance.value / 1000;
-            const durationMins = Math.ceil(leg.duration.value / 60);
-
-            // Apply motor estimate logic if not car
-            let finalKm = distanceKm;
-            if (!isCar) {
-                const straightKm = google.maps.geometry.spherical.computeDistanceBetween(
-                    leg.start_location,
-                    leg.end_location
-                ) / 1000;
-                const configService = window.APP.config[window.APP.service] || window.APP.config.RIDE || {};
-                const logic = configService.distance_logic || { lmf: 1.25, detour_limit: 1.15 };
-                const motorEstimate = straightKm * logic.lmf;
-                if (distanceKm > motorEstimate * logic.detour_limit) finalKm = motorEstimate;
-                else if (distanceKm < straightKm * 1.05) finalKm = straightKm * 1.10;
-            }
-
-            window.APP.calc = {
-                distance: parseFloat(finalKm.toFixed(2)),
-                duration: durationMins
-            };
-
-            // Display Distance
-            document.getElementById('dist-display').innerText = `${window.APP.calc.distance.toFixed(1)} km (${durationMins} mnt)`;
-
-            // Check Max Distance
-            if (window.APP.calc.distance > maxDistance) {
-                // GANTI KATA-KATA DI SINI
-                showError(`Maaf Kak, jarak pengantaran melebihi batas operasional kami (${maxDistance}km). 🙏`);
-                window.APP.calc.price = 0;
-            } else {
-                calculatePrice(finalKm);
-            }
-
-            // Show Pricing UI
-            document.getElementById('price-card').style.display = 'flex';
-            document.getElementById('btn-submit').classList.remove('disabled');
-            document.getElementById('btn-text').innerText = "Pesan Sekarang via WA";
-
-            // Trigger update link
-            updateLink();
-
-        } else {
-            showError("Waduh, rute tidak ditemukan. Coba geser titiknya dikit ya Kak! 🗺️");
-            window.APP.calc.price = 0;
-            document.getElementById('price-card').style.display = 'none';
-            updateLink();
+        if (!origin || !dest) {
+            showError("Mohon isi lokasi jemput dan tujuan dulu ya Kak! 🙏");
+            return;
         }
-    });
+
+        // ==========================================
+        // 🛡️ PAGAR GHAIB: CEK TITIK JEMPUT (PICKUP)
+        // ==========================================
+        const SALATIGA_CENTER = { lat: -7.3305, lng: 110.5084 }; // Alun-alun Pancasila
+
+        // Hitung jarak dari Pusat Salatiga ke Titik Jemput User
+        const distFromBase = google.maps.geometry.spherical.computeDistanceBetween(
+            origin.geometry.location,
+            new google.maps.LatLng(SALATIGA_CENTER.lat, SALATIGA_CENTER.lng)
+        ) / 1000; // Convert ke KM
+
+        // BATASAN: Driver cuma mau jemput max 15km dari pusat kota
+        if (distFromBase > 15) {
+            showError("Mohon maaf Kak, saat ini armada kami hanya melayani penjemputan di area Salatiga & Sekitarnya. 🙏");
+            return; // ⛔ STOP PROSES
+        }
+        // ==========================================
+
+        setLoading(true);
+        document.getElementById('error-card').style.display = 'none'; // Clear previous errors
+
+        // Get current service config
+        const serviceKey = window.APP.service;
+        // ✅ FIX: Set limit 150km for CAR, 30km for others
+        let defaultLimit = 30;
+        if (serviceKey === 'CAR') defaultLimit = 150;
+
+        // Use backend config if exists, otherwise use strict default
+        const maxDistance = defaultLimit;
+
+        const isCar = window.APP.service === 'CAR';
+        const travelMode = isCar ? google.maps.TravelMode.DRIVING : google.maps.TravelMode.TWO_WHEELER;
+        const tollAllowed = window.APP.carOptions.toll;
+
+        const directionsService = new google.maps.DirectionsService();
+        const request = {
+            origin: origin.geometry.location,
+            destination: dest.geometry.location,
+            travelMode: travelMode,
+            avoidTolls: !tollAllowed
+        };
+
+        directionsService.route(request, function (result, status) {
+            setLoading(false);
+
+            if (status === google.maps.DirectionsStatus.OK) {
+                window.APP.directionsRenderer.setDirections(result);
+                if (result.routes[0]?.bounds) {
+                    window.APP.map.fitBounds(result.routes[0].bounds, { padding: 60 });
+                }
+
+                // Get distance & duration
+                const leg = result.routes[0].legs[0];
+                const distanceKm = leg.distance.value / 1000;
+                const durationMins = Math.ceil(leg.duration.value / 60);
+
+                // Apply motor estimate logic if not car
+                let finalKm = distanceKm;
+                if (!isCar) {
+                    const straightKm = google.maps.geometry.spherical.computeDistanceBetween(
+                        leg.start_location,
+                        leg.end_location
+                    ) / 1000;
+                    const logic = { lmf: 1.25, detour_limit: 1.15 };
+                    const motorEstimate = straightKm * logic.lmf;
+                    if (distanceKm > motorEstimate * logic.detour_limit) finalKm = motorEstimate;
+                    else if (distanceKm < straightKm * 1.05) finalKm = straightKm * 1.10;
+                }
+
+                window.APP.calc = {
+                    distance: parseFloat(finalKm.toFixed(2)),
+                    duration: durationMins
+                };
+
+                // Display Distance
+                document.getElementById('dist-display').innerText = `${window.APP.calc.distance.toFixed(1)} km (${durationMins} mnt)`;
+
+                // Check Max Distance
+                if (window.APP.calc.distance > maxDistance) {
+                    // GANTI KATA-KATA DI SINI
+                    showError(`Maaf Kak, jarak pengantaran melebihi batas operasional kami (${maxDistance}km). 🙏`);
+                    window.APP.calc.price = 0;
+                } else {
+                    calculatePrice(finalKm);
+                }
+
+                // Show Pricing UI
+                document.getElementById('price-card').style.display = 'flex';
+                document.getElementById('btn-submit').classList.remove('disabled');
+                document.getElementById('btn-text').innerText = "Pesan Sekarang via WA";
+
+                // Trigger update link
+                updateLink();
+
+            } else {
+                showError("Waduh, rute tidak ditemukan. Coba geser titiknya dikit ya Kak! 🗺️");
+                window.APP.calc.price = 0;
+                document.getElementById('price-card').style.display = 'none';
+                updateLink();
+            }
+        });
+    }, 'calculateRoute');
 }
 
 function showError(msg) {
@@ -587,112 +520,22 @@ function showError(msg) {
 }
 
 function calculatePrice(distance) {
-    const service = window.APP.service;
-    const config = window.APP.config[service];
-
-    if (!config) {
-        showError("Gagal mengambil data harga server. Refresh halaman.");
-        return;
-    }
-
-    let price = 0;
-    const tiers = config.pricing_model?.tiers || config.TIERS;
-
-    if (Array.isArray(tiers)) {
-        const tier = tiers.find(t => distance >= t.min_km && distance < t.max_km) || tiers[tiers.length - 1];
-        if (tier.calculation_type === 'FLAT') price = tier.base_price;
-        else price = tier.base_price + ((distance - tier.offset_km) * tier.price_per_km);
-    }
-    else if (tiers.BASE) {
-        const baseLimit = tiers.BASE.max_distance_km || 2;
-        if (distance <= baseLimit) price = tiers.BASE.delivery_fee;
-        else price = tiers.MID.base_fee + ((distance - baseLimit) * tiers.MID.price_per_km);
-    }
-
-    if (service === 'CAR' && window.APP.carOptions.seats === 6) {
-        price *= 1.3;
-    }
-
-    price = Math.ceil(price / 500) * 500;
-    window.APP.calc.price = price;
-
-    const fakePrice = Math.ceil((price * 1.10) / 500) * 500;
-    document.getElementById('fake-price').innerText = `Rp ${fakePrice.toLocaleString('id-ID')}`;
-
-    document.getElementById('price-display').innerText = `Rp ${price.toLocaleString('id-ID')}`;
-    document.getElementById('dist-display').innerText = `${distance.toFixed(1)} km`;
-    document.getElementById('price-card').style.display = 'flex';
-
+    const estimate = runtimeUI.calculatePrice(distance, window.APP.service, window.APP.carOptions);
+    window.APP.calc.price = estimate?.price || 0;
     updateLink();
 }
 
 function updateLink() {
-    const btn = document.getElementById('btn-submit');
-    const textBtn = document.getElementById('btn-text');
-    const price = window.APP.calc.price;
-
     const originVal = document.getElementById('origin').value.trim();
     const destVal = document.getElementById('destination').value.trim();
 
-    if (price === 0 || originVal === '' || destVal === '') {
-        btn.classList.add('disabled');
-        textBtn.innerText = "Isi Lokasi Dulu";
-        return;
-    }
-
-    const orgLat = window.APP.places.origin?.geometry?.location?.lat();
-    const orgLng = window.APP.places.origin?.geometry?.location?.lng();
-    const destLat = window.APP.places.dest?.geometry?.location?.lat();
-    const destLng = window.APP.places.dest?.geometry?.location?.lng();
-
-    let displayService = window.APP.service;
-    let serviceCode = 'OJK';
-
-    if (window.APP.service === 'RIDE') { displayService = 'Ojek'; serviceCode = 'OJK'; }
-    if (window.APP.service === 'SEND') { displayService = 'Kirim Barang'; serviceCode = 'SND'; }
-    if (window.APP.service === 'FOOD_MART') { displayService = 'Food & Mart'; serviceCode = 'JST'; }
-    if (window.APP.service === 'CAR') { displayService = 'Mobil'; serviceCode = 'CAR'; }
-
-    const orderID = `${serviceCode}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
-
-    let msg = `Halo Kak! Order ${displayService}\n` +
-        `ID: ${orderID}\n` +
-        `----------------\n` +
-        `Asal: ${originVal}\n` +
-        `(GPS: ${orgLat}, ${orgLng})\n` +
-        `Tujuan: ${destVal}\n` +
-        `(GPS: ${destLat}, ${destLng})\n`;
-
-    const note = document.getElementById('note').value;
-    if (note) msg += `Catatan: ${note}\n`;
-
-    if (window.APP.service === 'FOOD_MART') {
-        const items = document.getElementById('items').value;
-        const estPrice = document.getElementById('est-price').value;
-        msg += `----------------\n` +
-            `Item: ${items}\n` +
-            `Est. Harga: Rp ${estPrice || 0}\n`;
-    }
-
-    if (window.APP.service === 'CAR') {
-        const seatLabel = window.APP.carOptions.seats === 6 ? '6 Seat' : '4 Seat';
-        const tollLabel = window.APP.carOptions.toll ? 'Yes' : 'No';
-        msg += `----------------\n` +
-            `[${seatLabel}]\n` +
-            `Via Tol: ${tollLabel}\n`;
-    }
-
-    msg += `----------------\n` +
-        `Jarak: ${window.APP.calc.distance} km\n` +
-        `Ongkir: Rp ${price.toLocaleString('id-ID')}\n` +
-        `================\n` +
-        `Gas jemput?`;
-
-    btn.classList.remove('disabled');
-    textBtn.innerText = `GAS ORDER • Rp ${price.toLocaleString('id-ID')}`;
-    btn.href = 'https://wa.me/' + CONFIG_WA + '?text=' + encodeURIComponent(msg);
-
     if (window.APP.places.origin && window.APP.places.dest) {
+        const orgLat = window.APP.places.origin?.geometry?.location?.lat();
+        const orgLng = window.APP.places.origin?.geometry?.location?.lng();
+        const destLat = window.APP.places.dest?.geometry?.location?.lat();
+        const destLng = window.APP.places.dest?.geometry?.location?.lng();
+        const note = document.getElementById('note').value;
+
         const history = {
             origin_addr: originVal, origin_lat: orgLat, origin_lng: orgLng,
             dest_addr: destVal, dest_lat: destLat, dest_lng: destLng,
@@ -700,11 +543,13 @@ function updateLink() {
         };
         localStorage.setItem('bantujeg_history', JSON.stringify(history));
     }
+
+    runtimeUI.refreshActionState();
 }
 
 function setService(type, el) {
     window.APP.service = type;
-
+    runtimeUI.onServiceChanged(type);
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     if (el) el.classList.add('active');
     else document.querySelector('.tab').classList.add('active');
@@ -976,7 +821,7 @@ window.confirmLocation = function () {
     const type = activeField === 'pickup' ? 'origin' : 'destination';
 
     // Disable button during geocode
-    const confirmBtn = document.getElementById('confirm-btn');
+    const confirmBtn = document.getElementById('confirm-picker-btn');
     const addressDisplay = document.getElementById('picker-address');
     confirmBtn.disabled = true;
     addressDisplay.innerText = 'Mencari alamat...';
@@ -1050,15 +895,34 @@ window.useHistory = useHistory;
 window.handleCarOptionChange = handleCarOptionChange;
 window.setActiveField = setActiveField;
 
-// Auto-Init Map if Google is ready (since script is deferred now)
-if (window.google && window.google.maps) {
+// Runtime-safe initialization entrypoint — idempotent
+// Runtime-safe initialization entrypoint — idempotent
+window.initializeLegacyUI = function () {
+    if (window.__bantujegInitialized) return;
+
+    // WAIT FOR GOOGLE MAPS
+    if (!window.google || !window.google.maps) {
+        // Should be called by callback, but just in case
+        return;
+    }
+
+    window.__bantujegInitialized = true;
+    console.log("🚀 LIFT OFF: Legacy UI + Runtime Shield");
+
     initMap();
     initAutocomplete();
-} else {
-    // Fallback if GMaps loads slower than this module
-    window.initMapCallback = function () {
-        initMap();
-        initAutocomplete();
-    };
-}
 
+    // Force default tab
+    setService('RIDE', document.querySelector('.tab'));
+
+    // CRITICAL: Initialize Runtime UI (Payment, Pricing, etc)
+    // Delay slightly to ensure DOM is fully settled
+    setTimeout(() => {
+        runtimeUI.initialize();
+        if (window.APP.places.origin && window.APP.places.dest) {
+            calculateRoute();
+        } else {
+            updateLink();
+        }
+    }, 100);
+};

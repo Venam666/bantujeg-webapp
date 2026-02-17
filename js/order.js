@@ -1,4 +1,4 @@
-import { assertNoActiveOpenOrder, createOrder, getServerQuote } from './api.js';
+import { createOrder } from './api.js';
 // map.js completely removed to avoid conflict with legacy-logic.js
 
 export function bindOrderHandlers({ session, onDraftReady, setDraft }) {
@@ -7,22 +7,18 @@ export function bindOrderHandlers({ session, onDraftReady, setDraft }) {
 }
 
 export async function submitOrder({ session, draft }) {
-  const canCreate = await assertNoActiveOpenOrder(session.customerId);
-  if (!canCreate) {
-    throw new Error('Masih ada order aktif. Selesaikan/cancel order sebelumnya.');
-  }
-
   const payload = {
-    customerId: session.customerId,
-    phone: session.phone,
-    serviceType: draft.serviceType,
-    pickup: draft.pickup,
-    destination: draft.destination,
-    distanceKm: draft.distanceKm,
-    price: draft.price,
-    paymentType: draft.paymentType,
+    source: 'web',
+    customer_phone: session.phone,
+    session_key: session.sessionKey,
+    pickup_coords: draft.pickup,
+    dropoff_coords: draft.destination,
+    service_type: draft.serviceType,
+    notes: draft.notes || '',
+    payment_method: String(draft.paymentType || 'cash').toLowerCase(),
+    price_hint: draft.price
   };
 
-  const { orderId } = await createOrder(payload);
-  return orderId;
+  const response = await createOrder(payload);
+  return response?.orderId || response?.order_id || response?.id;
 }

@@ -173,6 +173,9 @@
                     Tarif Resmi<br>BantuJeg
                 </div>
             </div>
+
+            <!-- Runtime payment selector mount point -->
+            <div id="payment-selector-mount"></div>
         </div>
 
         <div class="bottom-bar">
@@ -217,6 +220,13 @@
     <script type="module" src="./js/auth.js"></script>
 
     <script type="module">
+        // Expose __mapsReady callback for Google Maps async loading
+        window.__mapsReady = function () {
+            if (window.initializeLegacyUI) {
+                window.initializeLegacyUI();
+            }
+        };
+
         document.addEventListener('DOMContentLoaded', async () => {
             console.log("🚀 Booting BantuJeg...");
 
@@ -230,6 +240,11 @@
                 document.getElementById('view-login').style.display = 'none';
                 document.getElementById('view-login').classList.add('hidden');
                 document.getElementById('view-main').classList.remove('hidden');
+                // Maps will call __mapsReady when ready, which calls initializeLegacyUI.
+                // If Maps already loaded (e.g. cached), call immediately.
+                if (window.google && window.google.maps) {
+                    window.__mapsReady();
+                }
             } else {
                 document.getElementById('view-main').classList.add('hidden');
                 document.getElementById('view-login').style.display = 'flex';
@@ -254,9 +269,10 @@
     </script>
 
     <!-- GOOGLE MAPS & LEGACY LOGIC -->
-    <script
-        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDwbtq81niH-J_a8N_VS0gAEehuBUCrNWM&libraries=places,geometry"></script>
     <script type="module" src="./js/legacy-logic.js"></script>
+    <script
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDwbtq81niH-J_a8N_VS0gAEehuBUCrNWM&libraries=places,geometry&callback=__mapsReady&loading=async"
+        async defer></script>
 </body>
 
 </html>

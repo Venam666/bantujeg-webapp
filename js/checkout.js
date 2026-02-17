@@ -1,10 +1,8 @@
-import { lockOrder, requestCheckoutToken, verifyCheckoutToken } from './api.js';
 import { submitOrder } from './order.js';
 
 export function bindCheckoutHandlers({ getSession, getDraft, setOrderId, onOrderLocked }) {
   const confirmBtn = document.getElementById('confirm-order-btn');
   const paymentInput = document.getElementById('checkout-payment');
-  const paidInput = document.getElementById('paid-flag');
   const errorBox = document.getElementById('checkout-error');
 
   confirmBtn.addEventListener('click', async () => {
@@ -19,14 +17,6 @@ export function bindCheckoutHandlers({ getSession, getDraft, setOrderId, onOrder
 
       draft.paymentType = paymentInput.value;
       const orderId = await submitOrder({ session, draft });
-
-      const antiFraud = await requestCheckoutToken(orderId, session.sessionToken);
-      await verifyCheckoutToken(orderId, antiFraud.token, session.sessionToken);
-
-      await lockOrder(orderId, {
-        paymentType: paymentInput.value,
-        paymentStatus: paidInput.value,
-      });
 
       setOrderId(orderId);
       onOrderLocked(orderId);
