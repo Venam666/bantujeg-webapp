@@ -1,123 +1,213 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>BantuJeg WebApp</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="./css/style.css">
-    <!-- Google Maps script handled at bottom -->
+    <meta name="theme-color" content="#ffffff">
+    <title>BantuJeg - Order Cepat</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
 </head>
-<body class="bg-gray-50 text-gray-900 font-sans select-none overflow-hidden">
 
-    <!-- OVERLAY: LOADING -->
-    <div id="overlay" class="fixed inset-0 bg-black bg-opacity-70 z-[9999] hidden flex flex-col items-center justify-center backdrop-blur-sm">
-        <div class="animate-spin rounded-full h-12 w-12 border-4 border-white border-t-transparent shadow-lg mb-4"></div>
-        <p class="text-white font-bold text-lg animate-pulse">Memproses...</p>
-    </div>
+<body>
 
-    <!-- VIEW: LOGIN -->
-    <div id="view-login" class="min-h-screen flex flex-col items-center justify-center p-6 bg-white">
-        <div class="w-full max-w-sm text-center">
-            <!-- Logo Placeholder -->
-            <div class="mb-8">
-                <h1 class="text-4xl font-extrabold text-[color:var(--gojek-green)] tracking-tight">BantuJeg</h1>
-                <p class="text-gray-500 mt-2 text-sm">Aplikasi Ojek & Pengiriman Lokal</p>
+    <!-- ========================
+         VIEW: LOGIN
+         ======================== -->
+    <div id="view-login">
+        <div class="brand-name">BantuJeg.</div>
+        <div class="login-subtitle">Masuk untuk mulai pesan ojek &amp; kurir 🛵</div>
+        <div class="login-box">
+            <h2>Masuk dengan No. HP</h2>
+            <div class="login-input-group">
+                <input type="tel" id="phone-input" placeholder="Contoh: 08123456789" autocomplete="tel">
             </div>
-
-            <div class="mb-8 text-left">
-                <label class="block text-gray-700 text-sm font-bold mb-2 ml-1">Nomor WhatsApp</label>
-                <div class="relative">
-                    <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-gray-500 font-bold">+62</span>
-                    <input type="tel" id="login-phone" placeholder="8123456789" class="input-field w-full pl-14 pr-4 py-4 rounded-xl text-lg font-medium text-gray-900 bg-gray-50">
-                </div>
-                <p class="text-xs text-gray-400 mt-3 ml-1">Kami akan mengirimkan link masuk ke WhatsApp Anda.</p>
-            </div>
-
-            <button onclick="requestLogin()" class="btn-primary w-full py-4 rounded-full text-lg shadow-lg">
-                Masuk / Daftar
-            </button> <!-- closing button tag was missing -->
-        </div>
-        
-        <div class="mt-12 text-center text-xs text-gray-400">
-            &copy; 2026 BantuJeg Inc.
+            <button class="btn-login" onclick="requestLogin()">Kirim Magic Link →</button>
+            <p class="login-note">Link masuk akan dikirim ke WhatsApp kamu.</p>
         </div>
     </div>
 
-    <!-- VIEW: MAIN -->
-    <div id="view-main" class="hidden h-screen flex flex-col relative w-full max-w-md mx-auto bg-white shadow-2xl overflow-hidden">
-        
-        <!-- Map Container -->
-        <div id="map" class="flex-grow z-0"></div>
+    <!-- ========================
+         VIEW: MAIN APP
+         ======================== -->
+    <div id="view-main">
 
-        <!-- Action Panel -->
-        <div class="bg-white rounded-t-3xl shadow-[0_-5px_20px_rgba(0,0,0,0.1)] p-5 -mt-6 z-10 relative">
-            
-            <!-- Dragger Handle (Visual Only) -->
-            <div class="w-12 h-1 bg-gray-300 rounded-full mx-auto mb-6"></div>
+        <header>
+            <div class="brand-container">
+                <div class="brand-name">BantuJeg.</div>
+                <div class="greeting">Siap Antar Kamu! 👋</div>
+            </div>
+            <div class="pulse" id="status-dot"></div>
+        </header>
 
-            <!-- Service Tabs -->
-            <div class="flex justify-between space-x-3 overflow-x-auto pb-2 mb-4 no-scrollbar">
-                <button onclick="setService('RIDE')" id="btn-RIDE" class="service-tab active flex-1 py-3 px-2 rounded-2xl text-sm font-bold whitespace-nowrap transition flex flex-col items-center justify-center gap-1">
-                    <span>🛵</span>
-                    <span>JEG-RIDE</span>
-                </button>
-                <button onclick="setService('FOOD')" id="btn-FOOD" class="service-tab inactive flex-1 py-3 px-2 rounded-2xl text-sm font-bold whitespace-nowrap transition flex flex-col items-center justify-center gap-1">
-                    <span>🍔</span>
-                    <span>JEG-FOOD</span>
-                </button>
-                <button onclick="setService('SEND')" id="btn-SEND" class="service-tab inactive flex-1 py-3 px-2 rounded-2xl text-sm font-bold whitespace-nowrap transition flex flex-col items-center justify-center gap-1">
-                    <span>📦</span>
-                    <span>JEG-SEND</span>
-                </button>
+        <div id="map-wrapper">
+            <div id="map-container">
+                <div id="map"></div>
+            </div>
+        </div>
+
+        <div class="card-interface">
+
+            <div id="history-chip" onclick="useHistory()">
+                <span id="history-text">🕒 Pakai Rute Terakhir...</span>
+                <div style="font-size:1.2rem">↪️</div>
             </div>
 
-            <!-- Inputs -->
-            <div class="space-y-4">
-                <!-- Pickup -->
-                <div class="relative group">
-                    <span class="absolute left-4 top-4 text-[10px] transform scale-150 dot-pickup">●</span>
-                    <input id="input-pickup" type="text" placeholder="Lokasi Jemput (Cari disini...)" class="input-field w-full pl-10 pr-4 py-3 rounded-xl text-sm bg-gray-50 group-hover:bg-white">
-                </div>
-                
-                <!-- Dropoff -->
-                <div class="relative group">
-                    <span class="absolute left-4 top-4 text-[10px] transform scale-150 dot-dropoff">●</span>
-                    <input id="input-dropoff" type="text" placeholder="Tujuan Antar (Cari disini...)" class="input-field w-full pl-10 pr-4 py-3 rounded-xl text-sm bg-gray-50 group-hover:bg-white">
-                </div>
+            <div class="tabs">
+                <div class="tab active" onclick="setService('RIDE', this)">🛵 OJEK</div>
+                <div class="tab" onclick="setService('SEND', this)">📦 SEND</div>
+                <div class="tab" onclick="setService('FOOD_MART', this)">🍜 FOOD &amp; MART</div>
+                <div class="tab" onclick="setService('CAR', this)">🚗 MOBIL</div>
+            </div>
 
-                <!-- Note -->
-                <div class="relative group">
-                    <span class="absolute left-4 top-3.5 text-gray-400">📝</span>
-                    <input id="input-note" type="text" placeholder="Catatan untuk driver (Opsional)" class="input-field w-full pl-10 pr-4 py-3 rounded-xl text-sm bg-gray-50">
+            <div class="input-group">
+                <div class="input-wrapper" id="wrapper-origin">
+                    <span class="input-icon">📍</span>
+                    <input type="text" id="origin" placeholder="Jemput di mana? (Cari Masjid/Sekolah)"
+                        onfocus="setActiveField('pickup'); expandMap()" oninput="handleInput('origin')"
+                        aria-label="Lokasi penjemputan" autocomplete="off">
+                    <div class="clear-btn" id="clear-origin" onclick="clearInput('origin')" role="button" tabindex="0"
+                        aria-label="Hapus lokasi penjemputan">✕</div>
                 </div>
+                <div class="input-actions" id="actions-origin">
+                    <div class="action-btn map-picker" onclick="openMapPicker('origin')">🗺️ Pilih lewat peta</div>
+                    <div class="action-btn gps-btn" id="gps-origin" onclick="getCurrentLocation('origin')"
+                        style="display:none;">🎯 Lokasi Saya</div>
+                </div>
+            </div>
 
-                <!-- Payment & Submit -->
-                <div class="flex space-x-3 pt-3">
-                    <div class="w-1/3">
-                        <select id="input-payment" class="input-field w-full h-full rounded-xl px-3 text-sm font-bold text-gray-700 bg-white">
-                            <option value="CASH">💵 Tunai</option>
-                            <option value="QRIS">💳 QRIS</option>
-                        </select>
+            <div class="input-group">
+                <div class="input-wrapper" id="wrapper-destination">
+                    <span class="input-icon">🏁</span>
+                    <input type="text" id="destination" placeholder="Antar ke mana?" onfocus="setActiveField('dropoff')"
+                        oninput="handleInput('destination')" aria-label="Lokasi tujuan" autocomplete="off">
+                    <div class="clear-btn" id="clear-destination" onclick="clearInput('destination')" role="button"
+                        tabindex="0" aria-label="Hapus lokasi tujuan">✕</div>
+                </div>
+                <div class="input-actions" id="actions-destination">
+                    <div class="action-btn map-picker" onclick="openMapPicker('destination')">🗺️ Pilih lewat peta</div>
+                    <div class="action-btn gps-btn" id="gps-destination" onclick="getCurrentLocation('destination')"
+                        style="display:none;">🎯 Lokasi Saya</div>
+                </div>
+            </div>
+
+            <div class="input-group">
+                <div class="input-wrapper">
+                    <span class="input-icon">📝</span>
+                    <textarea id="note" rows="1" placeholder="Catatan (Pagar hitam, dll)"
+                        oninput="updateLink(); toggleClearBtn('note')" aria-label="Catatan tambahan"
+                        autocomplete="off"></textarea>
+                    <div class="clear-btn" id="clear-note" onclick="clearInput('note')" role="button" tabindex="0"
+                        aria-label="Hapus catatan">✕</div>
+                </div>
+                <div class="note-chips">
+                    <div class="chip" onclick="addNote('Uang Pas')">Uang Pas</div>
+                    <div class="chip" onclick="addNote('Pagar Hitam')">Pagar Hitam</div>
+                    <div class="chip" onclick="addNote('Sesuai Titik')">Sesuai Titik</div>
+                    <div class="chip" onclick="addNote('Jemput di Gang')">Jemput di Gang</div>
+                </div>
+                <div id="legal-warning">
+                    ⚠️ Dilarang kirim: Narkoba, Hewan, Senjata &amp; Barang Ilegal. Driver berhak cek barang.
+                </div>
+            </div>
+
+            <div id="jastip-field" style="display: none;">
+                <div class="input-group">
+                    <div class="input-wrapper">
+                        <span class="input-icon">🛒</span>
+                        <textarea id="items" rows="2" placeholder="List belanjaan..." oninput="updateLink()"
+                            aria-label="Daftar belanjaan" autocomplete="off"></textarea>
                     </div>
-                    <button onclick="submitOrder()" class="btn-primary w-2/3 py-3.5 rounded-xl shadow-lg flex items-center justify-center text-lg">
-                        PESAN SEKARANG
-                    </button>
+                </div>
+                <div class="input-group">
+                    <div class="input-wrapper">
+                        <span class="input-icon">💰</span>
+                        <input type="number" id="est-price" placeholder="Estimasi harga barang (Rp)" oninput="updateLink()"
+                            aria-label="Estimasi harga barang" autocomplete="off">
+                    </div>
                 </div>
             </div>
+
+            <div class="car-options" id="car-options">
+                <h4>Pilih Kursi</h4>
+                <div class="option-row">
+                    <label class="seat-option">
+                        <input type="radio" name="car-seat" value="4" checked onchange="handleCarOptionChange()">
+                        4 Seat
+                    </label>
+                    <label class="seat-option">
+                        <input type="radio" name="car-seat" value="6" onchange="handleCarOptionChange()">
+                        6 Seat
+                    </label>
+                </div>
+                <label class="toll-option">
+                    <input type="checkbox" id="car-toll" onchange="handleCarOptionChange()">
+                    Lewat Tol (Biaya tol &amp; parkir ditanggung penumpang)
+                </label>
+            </div>
+
+            <div class="payment-group">
+                <label for="payment-method">💳 Metode Pembayaran</label>
+                <select id="payment-method">
+                    <option value="CASH">💵 Bayar Tunai (Cash)</option>
+                    <option value="QRIS">📱 QRIS</option>
+                </select>
+            </div>
+
+            <div class="error-card" id="error-card">
+                ✋ Kejauhan Boss! Max 30km ya.
+            </div>
+
+            <div class="price-card" id="price-card">
+                <div>
+                    <div class="price-dist" id="dist-display">0 km</div>
+                    <div class="fake-price" id="fake-price">Rp 0</div>
+                    <div class="price-main">
+                        <span id="price-display">Rp 0</span>
+                        <span class="promo-tag">⚡ Promo</span>
+                    </div>
+                </div>
+                <div style="text-align: right; font-size: 0.8rem; opacity: 0.7;">
+                    Tarif Resmi<br>BantuJeg
+                </div>
+            </div>
+
+        </div><!-- /.card-interface -->
+
+        <div class="bottom-bar">
+            <button id="btn-submit" class="btn-cta disabled" onclick="submitOrder()">
+                <span id="btn-text">Isi Lokasi Dulu</span>
+                <div class="spinner" id="loading-spin"></div>
+            </button>
+        </div>
+
+    </div><!-- /#view-main -->
+
+    <!-- Map Picker Modal (outside view-main so it always overlays) -->
+    <div id="map-picker-modal">
+        <div class="picker-header">
+            <button class="close-modal-btn" onclick="closeMapPicker()">✕</button>
+            <h3 id="picker-title">Tentukan Titik Jemput</h3>
+        </div>
+        <div class="picker-map-container">
+            <div id="picker-map"></div>
+            <div class="center-pin">
+                <div class="pin-label" id="pin-label">Lokasi Jemput</div>
+                <div class="pin-icon">📍</div>
+            </div>
+        </div>
+        <div class="picker-footer">
+            <div class="address-display" id="picker-address">Geser peta untuk memilih lokasi...</div>
+            <button class="confirm-location-btn" id="confirm-btn" onclick="confirmLocation()">KONFIRMASI LOKASI</button>
         </div>
     </div>
 
-    <!-- SCRIPTS LOADING ORDER IS CRITICAL -->
-    <!-- 1. Auth Logic -->
     <script src="./js/auth.js"></script>
-    <!-- 2. Map Logic -->
-    <script src="./js/map.js"></script>
-    <!-- 3. Main App Logic -->
     <script src="./js/app.js"></script>
-    <!-- 4. Google Maps API (Async) -->
+    <script src="./js/map.js"></script>
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDwbtq81niH-J_a8N_VS0gAEehuBUCrNWM&libraries=places,geometry&callback=initMap" async defer></script>
 
 </body>

@@ -1,88 +1,94 @@
-// --- AUTHENTICATION LOGIC ---
+// ========================
+// auth.js - The Login Cables
+// ========================
 
-// Helper to check auth status
-window.checkAuth = async function () {
-    // Check URL for token (Magic Link)
-    const urlParams = new URLSearchParams(window.location.search);
-    const urlToken = urlParams.get('token');
+var BACKEND_URL = 'http://localhost:3000'; // 🔧 Replace with your actual backend URL
 
-    if (urlToken) {
-        await verifyToken(urlToken);
-    } else {
-        // Check LocalStorage
-        const storedToken = localStorage.getItem('sessionToken');
-        if (storedToken) {
-            STATE.token = storedToken;
-            STATE.phone = localStorage.getItem('customerPhone');
-            showMainView();
-        } else {
-            showLoginView();
-        }
-    }
-};
-
-async function verifyToken(token) {
-    showOverlay(true);
-    try {
-        const response = await fetch(`${BACKEND_URL}/auth/verify`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token })
-        });
-
-        const data = await response.json();
-
-        if (response.ok && data.sessionToken) {
-            // Success: Save session
-            localStorage.setItem('sessionToken', data.sessionToken);
-            localStorage.setItem('customerPhone', data.customer?.phone || '');
-
-            // Clean URL
-            window.history.replaceState({}, document.title, window.location.pathname);
-
-            // Reload to clean state
-            window.location.reload();
-        } else {
-            alert("Login Failed: " + (data.message || "Invalid Token"));
-            showOverlay(false);
-            showLoginView();
-        }
-    } catch (e) {
-        console.error(e);
-        alert("Network Error during Login");
-        showOverlay(false);
-        showLoginView();
-    }
+// --- View toggling helpers ---
+function showLogin() {
+    document.getElementById('view-login').style.display = 'flex';
+    document.getElementById('view-main').style.display = 'none';
 }
 
-window.requestLogin = async function () {
-    const phoneInput = document.getElementById('login-phone').value;
-    if (!phoneInput) return alert("Please enter WhatsApp number");
+function showMain() {
+    document.getElementById('view-login').style.display = 'none';
+    document.getElementById('view-main').style.display = 'block';
+}
 
-    showOverlay(true);
-    try {
-        const res = await fetch(`${BACKEND_URL}/auth/request-login`, {
+// --- Check URL for magic link token ---
+(function checkMagicLink() {
+    var params = new URLSearchParams(window.location.search);
+    var token = params.get('token');
+
+    if (token) {
+        // Verify the token with backend
+        fetch(BACKEND_URL + '/auth/verify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone: phoneInput })
+            body: JSON.stringify({ token: token })
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data && data.success) {
+                localStorage.setItem('bj_token', data.session_key || token);
+                localStorage.setItem('bj_phone', data.phone || '');
+                // Clean URL
+                history.replaceState({}, document.title, window.location.pathname);
+                showMain();
+            } else {
+                alert('Link masuk tidak valid atau sudah kadaluarsa. Coba minta lagi ya.');
+                showLogin();
+            }
+        })
+        .catch(function(err) {
+            console.error('Auth verify error:', err);
+            alert('Gagal memverifikasi. Cek koneksi internet kamu.');
+            showLogin();
         });
-        const data = await res.json();
-
-        if (res.ok) {
-            alert("Login Link Sent! Check your WhatsApp.");
-        } else {
-            alert("Error: " + (data.message || "Failed to send link"));
-        }
-    } catch (e) {
-        console.error(e);
-        alert("Network Error");
-    } finally {
-        showOverlay(false);
+        return; // Wait for async verify
     }
+
+    // --- Check localStorage for existing session ---
+    var savedToken = localStorage.getItem('bj_token');
+    var savedPhone = localStorage.getItem('bj_phone');
+
+    if (savedToken && savedPhone) {
+        showMain();
+    } else {
+        showLogin();
+    }
+})();
+
+// --- Request login (send magic link) ---
+window.requestLogin = function() {
+    var phone = document.getElementById('phone-input').value.trim();
+    if (!phone) {
+        alert('Masukkan nomor HP dulu ya Kak!');
+        return;
+    }
+
+    fetch(BACKEND_URL + '/auth/request-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phone })
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+        if (data && data.success) {
+            alert('Magic link sudah dikirim ke WhatsApp kamu! 🎉 Cek sekarang.');
+        } else {
+            alert(data.message || 'Gagal mengirim link. Coba lagi.');
+        }
+    })
+    .catch(function(err) {
+        console.error('Request login error:', err);
+        alert('Gagal terhubung ke server. Cek koneksi internet kamu.');
+    });
 };
 
-window.logout = function () {
-    localStorage.removeItem('sessionToken');
-    localStorage.removeItem('customerPhone');
-    window.location.reload();
+// --- Logout helper (expose to window for future use) ---
+window.logout = function() {
+    localStorage.removeItem('bj_token');
+    localStorage.removeItem('bj_phone');
+    showLogin();
 };
