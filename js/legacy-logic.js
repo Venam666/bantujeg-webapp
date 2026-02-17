@@ -96,7 +96,8 @@ window.locationState = {
     dropoff: { lat: null, lng: null, source: null, address: '' }
 };
 
-window.APP = {
+// 🎯 CENTRAL APP STATE - MERGE with existing (auth, session)
+window.APP = Object.assign(window.APP || {}, {
     service: 'RIDE',
     config: { RIDE: null, FOOD_MART: null, SEND: null, CAR: null },
     places: { origin: null, dest: null }, // Legacy compatibility
@@ -114,7 +115,7 @@ window.APP = {
         locked: false,          // TRUE = no external writes allowed
         geocodeRequest: null
     }
-};
+});
 Object.seal(window.APP.config); // Prevent adding new keys
 
 const CONFIG_WA = "62895330091464";
@@ -1037,4 +1038,27 @@ window.expandMap = expandMap;
 window.setLoading = setLoading;
 window.handlePickerMapIdle = handlePickerMapIdle;
 window.performReverseGeocode = performReverseGeocode;
+window.openMapPicker = openMapPicker;
+window.closeMapPicker = closeMapPicker;
+window.confirmLocation = confirmLocation;
+window.getCurrentLocation = getCurrentLocation;
+window.handleInput = handleInput;
+window.clearInput = clearInput;
+window.toggleClearBtn = toggleClearBtn;
+window.addNote = addNote;
+window.useHistory = useHistory;
+window.handleCarOptionChange = handleCarOptionChange;
+window.setActiveField = setActiveField;
+
+// Auto-Init Map if Google is ready (since script is deferred now)
+if (window.google && window.google.maps) {
+    initMap();
+    initAutocomplete();
+} else {
+    // Fallback if GMaps loads slower than this module
+    window.initMapCallback = function () {
+        initMap();
+        initAutocomplete();
+    };
+}
 

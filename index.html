@@ -41,9 +41,165 @@
         </div>
     </div>
 
-    <!-- MAIN APP PLACEHOLDER (Preserved) -->
     <div id="view-main" class="hidden">
-        <h2 style="padding: 20px;">Berhasil Login! UI Legacy akan dirender di sini.</h2>
+        <header>
+            <div class="brand-container">
+                <div class="brand-name">BantuJeg.</div>
+                <div class="greeting">Siap Antar Kamu! 👋</div>
+            </div>
+            <div class="pulse" id="status-dot"></div>
+        </header>
+
+        <div id="map-wrapper">
+            <div id="map-container">
+                <div id="map"></div>
+            </div>
+        </div>
+
+        <div class="card-interface">
+            <div id="history-chip" onclick="useHistory()">
+                <span id="history-text">🕒 Pakai Rute Terakhir...</span>
+                <div style="font-size:1.2rem">↪️</div>
+            </div>
+
+            <div class="tabs">
+                <div class="tab active" onclick="setService('RIDE', this)">🛵 OJEK</div>
+                <div class="tab" onclick="setService('SEND', this)">📦 SEND</div>
+                <div class="tab" onclick="setService('FOOD_MART', this)">🍜 FOOD & MART</div>
+                <div class="tab" onclick="setService('CAR', this)">🚗 MOBIL</div>
+            </div>
+
+            <div class="input-group">
+                <div class="input-wrapper" id="wrapper-origin">
+                    <span class="input-icon">📍</span>
+                    <input type="text" id="origin" placeholder="Jemput di mana? (Cari Masjid/Sekolah)"
+                        onfocus="setActiveField('pickup'); expandMap()" oninput="handleInput('origin')"
+                        aria-label="Lokasi penjemputan" autocomplete="off">
+                    <div class="clear-btn" id="clear-origin" onclick="clearInput('origin')" role="button" tabindex="0"
+                        aria-label="Hapus lokasi penjemputan">✕</div>
+                </div>
+                <div class="input-actions" id="actions-origin">
+                    <div class="action-btn map-picker" onclick="openMapPicker('origin')">🗺️ Pilih lewat peta</div>
+                    <div class="action-btn gps-btn" id="gps-origin" onclick="getCurrentLocation('origin')"
+                        style="display:none;">🎯 Lokasi Saya</div>
+                </div>
+            </div>
+
+            <div class="input-group">
+                <div class="input-wrapper" id="wrapper-destination">
+                    <span class="input-icon">🏁</span>
+                    <input type="text" id="destination" placeholder="Antar ke mana?" onfocus="setActiveField('dropoff')"
+                        oninput="handleInput('destination')" aria-label="Lokasi tujuan" autocomplete="off">
+                    <div class="clear-btn" id="clear-destination" onclick="clearInput('destination')" role="button"
+                        tabindex="0" aria-label="Hapus lokasi tujuan">✕</div>
+                </div>
+                <div class="input-actions" id="actions-destination">
+                    <div class="action-btn map-picker" onclick="openMapPicker('destination')">🗺️ Pilih lewat peta</div>
+                    <div class="action-btn gps-btn" id="gps-destination" onclick="getCurrentLocation('destination')"
+                        style="display:none;">🎯 Lokasi Saya</div>
+                </div>
+            </div>
+
+            <div class="input-group">
+                <div class="input-wrapper">
+                    <span class="input-icon">📝</span>
+                    <textarea id="note" rows="1" placeholder="Catatan (Pagar hitam, dll)"
+                        oninput="updateLink(); toggleClearBtn('note')" aria-label="Catatan tambahan"
+                        autocomplete="off"></textarea>
+                    <div class="clear-btn" id="clear-note" onclick="clearInput('note')" role="button" tabindex="0"
+                        aria-label="Hapus catatan">✕</div>
+                </div>
+                <div class="note-chips">
+                    <div class="chip" onclick="addNote('Uang Pas')">Uang Pas</div>
+                    <div class="chip" onclick="addNote('Pagar Hitam')">Pagar Hitam</div>
+                    <div class="chip" onclick="addNote('Sesuai Titik')">Sesuai Titik</div>
+                    <div class="chip" onclick="addNote('Jemput di Gang')">Jemput di Gang</div>
+                </div>
+
+                <div id="legal-warning">
+                    ⚠️ Dilarang kirim: Narkoba, Hewan, Senjata & Barang Ilegal. Driver berhak cek barang.
+                </div>
+            </div>
+
+            <div id="jastip-field" style="display: none;">
+                <div class="input-group">
+                    <div class="input-wrapper">
+                        <span class="input-icon">🛒</span>
+                        <textarea id="items" rows="2" placeholder="List belanjaan..." oninput="updateLink()"
+                            aria-label="Daftar belanjaan" autocomplete="off"></textarea>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <div class="input-wrapper">
+                        <span class="input-icon">💰</span>
+                        <input type="number" id="est-price" placeholder="Estimasi harga barang (Rp)"
+                            oninput="updateLink()" aria-label="Estimasi harga barang" autocomplete="off">
+                    </div>
+                </div>
+            </div>
+
+            <div class="car-options" id="car-options">
+                <h4>Pilih Kursi</h4>
+                <div class="option-row">
+                    <label class="seat-option">
+                        <input type="radio" name="car-seat" value="4" checked onchange="handleCarOptionChange()">
+                        4 Seat
+                    </label>
+                    <label class="seat-option">
+                        <input type="radio" name="car-seat" value="6" onchange="handleCarOptionChange()">
+                        6 Seat
+                    </label>
+                </div>
+                <label class="toll-option">
+                    <input type="checkbox" id="car-toll" onchange="handleCarOptionChange()">
+                    Lewat Tol (Biaya tol & parkir ditanggung penumpang)
+                </label>
+            </div>
+
+            <div class="error-card" id="error-card">
+                ✋ Kejauhan Boss! Max 30km ya.
+            </div>
+
+            <div class="price-card" id="price-card">
+                <div>
+                    <div class="price-dist" id="dist-display">0 km</div>
+                    <div class="fake-price" id="fake-price">Rp 0</div>
+                    <div class="price-main">
+                        <span id="price-display">Rp 0</span>
+                        <span class="promo-tag">⚡ Promo</span>
+                    </div>
+                </div>
+                <div style="text-align: right; font-size: 0.8rem; opacity: 0.7;">
+                    Tarif Resmi<br>BantuJeg
+                </div>
+            </div>
+        </div>
+
+        <div class="bottom-bar">
+            <a id="btn-submit" href="#" class="btn-cta disabled">
+                <span id="btn-text">Isi Lokasi Dulu</span>
+                <div class="spinner" id="loading-spin"></div>
+            </a>
+        </div>
+
+        <div id="map-picker-modal">
+            <div class="picker-header">
+                <button class="close-modal-btn" onclick="closeMapPicker()">✕</button>
+                <h3 id="picker-title">Tentukan Titik Jemput</h3>
+            </div>
+            <div class="picker-map-container">
+                <div id="picker-map"></div>
+                <div class="center-pin">
+                    <div class="pin-label" id="pin-label">Lokasi Jemput</div>
+                    <div class="pin-icon">📍</div>
+                </div>
+            </div>
+            <div class="picker-footer">
+                <div class="address-display" id="picker-address">Mengambil lokasi...</div>
+                <button class="confirm-location-btn" onclick="confirmLocation()" disabled id="confirm-picker-btn">Pilih
+                    Lokasi Ini</button>
+            </div>
+        </div>
     </div>
 
     <!-- TASK 1: Static Init -->
@@ -51,7 +207,7 @@
         window.APP = window.APP || {};
         const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
         window.APP.api = {
-            baseUrl: isLocal ? 'http://localhost:8080' : 'https://tanganbantu-backend-422725955268.asia-southeast2.run.app'
+            baseUrl: isLocal ? 'http://localhost:3000' : 'https://tanganbantu-backend-422725955268.asia-southeast2.run.app'
         };
         window.APP.auth = {};
         window.APP.session = {};
@@ -96,6 +252,11 @@
             }
         });
     </script>
+
+    <!-- GOOGLE MAPS & LEGACY LOGIC -->
+    <script
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDwbtq81niH-J_a8N_VS0gAEehuBUCrNWM&libraries=places,geometry"></script>
+    <script type="module" src="./js/legacy-logic.js"></script>
 </body>
 
 </html>

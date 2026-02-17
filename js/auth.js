@@ -54,51 +54,86 @@ window.APP.auth.checkUrlForToken = async function () {
   const token = params.get('token');
 
   if (token) {
+    // Show verification UI
     document.body.innerHTML = `
-            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#f8fafc;font-family:'Plus Jakarta Sans',sans-serif;">
-                <h2 style="color:#10B981;">Memverifikasi...</h2>
-                <div style="color:#64748B;">Mohon tunggu sebentar ⏳</div>
-            </div>
-        `;
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#f8fafc;font-family:'Plus Jakarta Sans',sans-serif;padding:20px;text-align:center;">
+            <h2 style="color:#10B981;">Memverifikasi...</h2>
+            <div style="color:#64748B;margin-bottom:20px;">Mohon tunggu sebentar ⏳</div>
+            <div id="debug-log" style="color:red; font-size:12px; font-family:monospace; background:#fee2e2; padding:10px; border-radius:8px; max-width: 100%; word-break: break-all;"></div>
+        </div>
+    `;
+
+    const logEl = document.getElementById('debug-log');
+    const log = (msg) => {
+      console.log(msg);
+      // Optional: uncomment to see all logs on screen
+      // logEl.innerHTML += `<div>${msg}</div>`;
+    };
+    const errorLog = (msg) => {
+      console.error(msg);
+      logEl.innerHTML += `<div style="margin-bottom:8px;">${msg}</div>`;
+    };
 
     try {
-      const baseUrl = window.APP.api ? window.APP.api.baseUrl : '';
+      // 1. Validate Environment
+      if (!window.APP) throw new Error("window.APP is undefined");
+      if (!window.APP.api) throw new Error("window.APP.api is undefined");
 
-      const res = await fetch(`${baseUrl}/auth/verify`, {
+      const baseUrl = window.APP.api.baseUrl;
+      if (!baseUrl) throw new Error("window.APP.api.baseUrl is missing!");
+
+      const verifyUrl = `${baseUrl}/auth/verify`;
+
+      log(`🔍 Attempting to verify token at: ${verifyUrl}`);
+      log(`📝 Token: ${token.substring(0, 10)}...`);
+
+      // 2. Execute Fetch
+      const res = await fetch(verifyUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token })
+      }).catch(err => {
+        throw new Error(`Network Error (Fetch Failed): ${err.message}`);
       });
 
+      log(`📡 Response Status: ${res.status}`);
+
+      // 3. Parse Response
       const contentType = res.headers.get("content-type");
       let data;
       if (contentType && contentType.indexOf("application/json") !== -1) {
         data = await res.json();
       } else {
         const text = await res.text();
-        throw new Error("Server returned non-JSON response: " + text.substring(0, 50));
+        throw new Error(`Server returned non-JSON (${res.status}): ${text.substring(0, 100)}`);
       }
 
       if (!res.ok || !data.success) {
-        throw new Error(data.message || "Link tidak valid");
+        throw new Error(data.message || `Server Error (${res.status})`);
       }
 
-      // Success
-      window.APP.session.save(data.sessionToken, data.customer);
+      // 4. Success Handling
+      log("✅ Verification Success! Saving session...");
+      if (window.APP.session && window.APP.session.save) {
+        window.APP.session.save(data.sessionToken, data.customer);
+      } else {
+        throw new Error("window.APP.session.save is missing!");
+      }
 
+      // Clean URL
       const cleanUrl = new URL(window.location.href);
       cleanUrl.searchParams.delete('token');
       window.history.replaceState({}, '', cleanUrl.toString());
 
+      // Reload
       window.location.reload();
 
     } catch (error) {
-      alert("Link tidak valid atau sudah kadaluwarsa. (" + error.message + ")");
-      console.error(error);
-      const cleanUrl = new URL(window.location.href);
-      cleanUrl.searchParams.delete('token');
-      window.history.replaceState({}, '', cleanUrl.toString());
-      window.location.reload();
+      errorLog(`❌ VERIFICATION CRASH: ${error.message}`);
+      errorLog(`📚 Stack: ${error.stack}`);
+
+      // Stop execution, let user see the error.
+      // Do NOT auto-reload if it's a critical failure like this, so user can report it.
     }
   }
 };
