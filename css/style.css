@@ -1,0 +1,89 @@
+/* Gojek-inspired Green Theme */
+:root {
+    --gojek-green: #00AA13;
+    --gojek-green-dark: #00880F;
+    --gojek-green-light: #E6F7E9;
+}
+
+/* Base Styles */
+body {
+    background-color: #F3F4F6; /* gray-100 */
+    color: #111827; /* gray-900 */
+}
+
+/* Map Container */
+#map {
+    height: 100%;
+    width: 100%;
+    min-height: 50vh;
+    border-radius: 0; /* Full width usually doesn't have radius */
+}
+
+/* Utilities */
+.hidden {
+    display: none !important;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+/* Custom Component Styles */
+
+/* Primary Button */
+.btn-primary {
+    background-color: var(--gojek-green);
+    color: white;
+    font-weight: 700;
+    transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+    background-color: var(--gojek-green-dark);
+}
+
+.btn-primary:active {
+    transform: scale(0.98);
+}
+
+/* Service Tabs */
+.service-tab.active {
+    background-color: var(--gojek-green);
+    color: white;
+    box-shadow: 0 4px 6px -1px rgba(0, 170, 19, 0.3);
+}
+
+.service-tab.inactive {
+    background-color: #F3F4F6;
+    color: #4B5563;
+}
+
+.service-tab.inactive:hover {
+    background-color: #E5E7EB;
+}
+
+/* Input Fields */
+.input-field {
+    border: 1px solid #E5E7EB;
+    transition: all 0.2s;
+}
+
+.input-field:focus {
+    outline: none;
+    border-color: var(--gojek-green);
+    ring: 2px solid var(--gojek-green-light);
+    box-shadow: 0 0 0 2px var(--gojek-green-light);
+}
+
+/* Markers / Dots */
+.dot-pickup {
+    color: var(--gojek-green);
+}
+
+.dot-dropoff {
+    color: #EF4444; /* Red keeps semantic meaning */
+}
