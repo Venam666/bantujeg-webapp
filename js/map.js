@@ -2,19 +2,22 @@
    map.js - The Maps Cables
    ======================== */
 
-// 1. Prevent Early Access: Declare Variables
-let map, ds, dr; // Global map instances
-let pickerMap;   // Picker map instance
-let geocoder;    // Geocoder service (lazy init)
+// ─── 1. TOP-LEVEL DECLARATIONS ONLY (no `new google.maps.*` here) ───────────
+// These are assigned inside initMap() after the API is fully ready.
+var map = null;
+var directionsService = null;
+var directionsRenderer = null;
+var geocoder = null;
+var pickerMap = null;
+var acOrigin = null;
+var acDest = null;
 
-// 2. Define Map Namespace
+// ─── 2. APP_MAP NAMESPACE ────────────────────────────────────────────────────
 window.APP_MAP = {
 
-    // --- Shared Helpers ---
     getServiceMapSettings: function (service) {
-        var centerSalatiga = { lat: -7.3305, lng: 110.5084 };
         return {
-            center: centerSalatiga,
+            center: { lat: -7.3305, lng: 110.5084 },
             zoom: service === 'CAR' ? 10 : 13
         };
     },
@@ -25,11 +28,9 @@ window.APP_MAP = {
     },
 
     updateLocationState: function (field, lat, lng, source, address) {
-        // Update APP state
         if (window.APP && window.APP.state) {
             window.APP.state[field] = { lat: lat, lng: lng, source: source, address: address };
         }
-
         var placeType = field === 'pickup' ? 'origin' : 'dest';
         window.APP.places[placeType] = {
             geometry: { location: new google.maps.LatLng(lat, lng) },
@@ -37,13 +38,12 @@ window.APP_MAP = {
         };
     },
 
-    // --- Autocomplete ---
+    // Called from initMap() only — never at top level
     initAutocomplete: function () {
         var bounds = new google.maps.LatLngBounds(
             new google.maps.LatLng(-7.78, 110.05),
             new google.maps.LatLng(-6.88, 110.95)
         );
-
         var options = {
             bounds: bounds,
             componentRestrictions: { country: 'id' },
@@ -52,23 +52,30 @@ window.APP_MAP = {
             types: ['establishment', 'geocode']
         };
 
-        var acOrigin = new google.maps.places.Autocomplete(document.getElementById('origin'), options);
-        var acDest = new google.maps.places.Autocomplete(document.getElementById('destination'), options);
+        var originEl = document.getElementById('origin');
+        var destEl = document.getElementById('destination');
+        if (!originEl || !destEl) return;
+
+        acOrigin = new google.maps.places.Autocomplete(originEl, options);
+        acDest = new google.maps.places.Autocomplete(destEl, options);
 
         if (map) {
             acOrigin.bindTo('bounds', map);
             acDest.bindTo('bounds', map);
         }
 
-        acOrigin.addListener('place_changed', function () { window.APP_MAP.handlePlaceSelect('origin', acOrigin); });
-        acDest.addListener('place_changed', function () { window.APP_MAP.handlePlaceSelect('dest', acDest); });
+        acOrigin.addListener('place_changed', function () {
+            window.APP_MAP.handlePlaceSelect('origin', acOrigin);
+        });
+        acDest.addListener('place_changed', function () {
+            window.APP_MAP.handlePlaceSelect('dest', acDest);
+        });
     },
 
     handlePlaceSelect: function (type, ac) {
         if (window.APP.picker.locked) return;
-
         var place = ac.getPlace();
-        if (!place.geometry) return;
+        if (!place || !place.geometry) return;
 
         var inputId = type === 'origin' ? 'origin' : 'destination';
         var cleaned = window.APP_MAP.cleanAddress(place.formatted_address);
@@ -84,10 +91,9 @@ window.APP_MAP = {
         window.APP_MAP.drawRoute();
     },
 
-    // --- Markers ---
     updateMarker: function (type, lat, lng) {
+        if (!map) return;
         var markers = window.APP.markers;
-
         var iconUrl = type === 'origin'
             ? 'https://cdn-icons-png.flaticon.com/512/684/684908.png'
             : 'https://cdn-icons-png.flaticon.com/512/684/684913.png';
@@ -96,7 +102,7 @@ window.APP_MAP = {
 
         markers[type] = new google.maps.Marker({
             position: { lat: lat, lng: lng },
-            map: map, // Use the local 'map' variable
+            map: map,
             icon: { url: iconUrl, scaledSize: new google.maps.Size(40, 40) },
             label: {
                 text: type === 'origin' ? 'Jemput' : 'Tujuan',
@@ -117,7 +123,6 @@ window.APP_MAP = {
         }
     },
 
-    // --- History ---
     checkHistory: function () {
         var stored = localStorage.getItem('bantujeg_history');
         if (!stored) return;
@@ -125,9 +130,12 @@ window.APP_MAP = {
             var data = JSON.parse(stored);
             if (data && data.origin_addr && data.dest_addr) {
                 window.APP.historyData = data;
-                document.getElementById('history-text').innerText =
-                    '🕒 Pakai Rute Terakhir: ' + window.APP_MAP.cleanAddress(data.origin_addr) + ' → ' + window.APP_MAP.cleanAddress(data.dest_addr);
-                document.getElementById('history-chip').style.display = 'flex';
+                var histText = document.getElementById('history-text');
+                var histChip = document.getElementById('history-chip');
+                if (histText) histText.innerText = '🕒 Pakai Rute Terakhir: ' +
+                    window.APP_MAP.cleanAddress(data.origin_addr) + ' → ' +
+                    window.APP_MAP.cleanAddress(data.dest_addr);
+                if (histChip) histChip.style.display = 'flex';
             }
         } catch (e) { console.error(e); }
     },
@@ -164,8 +172,8 @@ window.APP_MAP = {
         window.toggleClearBtn('destination');
     },
 
-    // --- Route calculation ---
     drawRoute: function () {
+        if (!map || !directionsService || !directionsRenderer) return;
         var origin = window.APP.places.origin;
         var dest = window.APP.places.dest;
         if (!origin || !dest) return;
@@ -191,9 +199,7 @@ window.APP_MAP = {
         var isCar = serviceKey === 'CAR';
         var travelMode = isCar ? google.maps.TravelMode.DRIVING : google.maps.TravelMode.TWO_WHEELER;
 
-        if (!ds) ds = new google.maps.DirectionsService(); // Ensure ds exists
-
-        ds.route({
+        directionsService.route({
             origin: origin.geometry.location,
             destination: dest.geometry.location,
             travelMode: travelMode,
@@ -209,7 +215,7 @@ window.APP_MAP = {
                 return;
             }
 
-            dr.setDirections(result); // Using local 'dr'
+            directionsRenderer.setDirections(result);
             if (result.routes[0] && result.routes[0].bounds) {
                 map.fitBounds(result.routes[0].bounds, { padding: 60 });
             }
@@ -221,8 +227,7 @@ window.APP_MAP = {
             var finalKm = distanceKm;
             if (!isCar) {
                 var straightKm = google.maps.geometry.spherical.computeDistanceBetween(
-                    leg.start_location,
-                    leg.end_location
+                    leg.start_location, leg.end_location
                 ) / 1000;
                 var configService = window.APP.config[serviceKey] || window.APP.config.RIDE || {};
                 var logic = configService.distance_logic || { lmf: 1.25, detour_limit: 1.15 };
@@ -256,7 +261,6 @@ window.APP_MAP = {
         var config = window.APP.config[service];
 
         if (!config) {
-            // No backend pricing config loaded - show fallback
             window.APP_MAP.showError('Gagal mengambil data harga server. Refresh halaman.');
             return;
         }
@@ -296,12 +300,10 @@ window.APP_MAP = {
         var priceCard = document.getElementById('price-card');
         var btn = document.getElementById('btn-submit');
         var btnText = document.getElementById('btn-text');
-
-        errCard.style.display = 'block';
-        errCard.innerText = '✋ ' + msg;
-        priceCard.style.display = 'none';
-        btn.classList.add('disabled');
-        btnText.innerText = 'Jarak Terlalu Jauh';
+        if (errCard) { errCard.style.display = 'block'; errCard.innerText = '✋ ' + msg; }
+        if (priceCard) priceCard.style.display = 'none';
+        if (btn) btn.classList.add('disabled');
+        if (btnText) btnText.innerText = 'Jarak Terlalu Jauh';
         window.APP.calc.price = 0;
     },
 
@@ -309,92 +311,115 @@ window.APP_MAP = {
         var spin = document.getElementById('loading-spin');
         var txt = document.getElementById('btn-text');
         if (state) {
-            spin.style.display = 'block';
-            txt.style.display = 'none';
+            if (spin) spin.style.display = 'block';
+            if (txt) txt.style.display = 'none';
         } else {
-            spin.style.display = 'none';
-            txt.style.display = 'block';
+            if (spin) spin.style.display = 'none';
+            if (txt) txt.style.display = 'block';
         }
     },
 
-    // --- Map Picker Modal ---
+    // ─── MAP PICKER ──────────────────────────────────────────────────────────
     openMapPicker: function (type) {
         window.APP.picker.locked = true;
         window.APP.picker.activeField = type === 'origin' ? 'pickup' : 'dropoff';
 
         var modal = document.getElementById('map-picker-modal');
+        if (!modal) return;
         modal.classList.add('active');
 
-        document.getElementById('picker-title').innerText =
-            type === 'origin' ? 'Tentukan Titik Jemput' : 'Tentukan Tujuan';
-        document.getElementById('pin-label').innerText =
-            type === 'origin' ? 'Lokasi Jemput' : 'Lokasi Tujuan';
-        document.getElementById('picker-address').innerText = 'Geser peta untuk memilih lokasi...';
-
-        // Fix: Use setTimeout to ensure DOM is ready
-        setTimeout(function () {
-            if (!pickerMap) {
-                var mapSettings = window.APP_MAP.getServiceMapSettings(window.APP.service);
-                pickerMap = new google.maps.Map(document.getElementById('picker-map'), {
-                    center: mapSettings.center,
-                    zoom: mapSettings.zoom + 4,
-                    gestureHandling: 'greedy',
-                    disableDefaultUI: true,
-                    clickableIcons: false,
-                    zoomControl: true
-                });
-
-                // Assign to global APP if legacy needs it
-                window.APP.pickerMap = pickerMap;
-
-                pickerMap.addListener('idle', function () {
-                    var center = pickerMap.getCenter();
-                    window.APP.picker.currentLocation = { lat: center.lat(), lng: center.lng() };
-                });
-            }
-
-            google.maps.event.trigger(pickerMap, 'resize');
-
-            var field = type === 'origin' ? 'origin' : 'dest';
-            var existingPlace = window.APP.places[field];
-            var mapSettings = window.APP_MAP.getServiceMapSettings(window.APP.service);
-
-            if (existingPlace && existingPlace.geometry) {
-                var lat = existingPlace.geometry.location.lat();
-                var lng = existingPlace.geometry.location.lng();
-                window.APP.picker.currentLocation = { lat: lat, lng: lng };
-                pickerMap.setCenter({ lat: lat, lng: lng });
-                pickerMap.setZoom(18);
-            } else if (navigator.geolocation) {
-                // Try current location
-                navigator.geolocation.getCurrentPosition(
-                    function (pos) {
-                        var lat = pos.coords.latitude;
-                        var lng = pos.coords.longitude;
-                        window.APP.picker.currentLocation = { lat: lat, lng: lng };
-                        pickerMap.setCenter({ lat: lat, lng: lng });
-                        pickerMap.setZoom(18);
-                    },
-                    function () {
-                        // Fallback
-                        window.APP.picker.currentLocation = mapSettings.center;
-                        pickerMap.setCenter(mapSettings.center);
-                        pickerMap.setZoom(mapSettings.zoom + 4);
-                    }
-                );
-            } else {
-                window.APP.picker.currentLocation = mapSettings.center;
-                pickerMap.setCenter(mapSettings.center);
-                pickerMap.setZoom(mapSettings.zoom + 4);
-            }
-        }, 100); // 100ms Delay
+        var titleEl = document.getElementById('picker-title');
+        var labelEl = document.getElementById('pin-label');
+        var addrEl = document.getElementById('picker-address');
+        if (titleEl) titleEl.innerText = type === 'origin' ? 'Tentukan Titik Jemput' : 'Tentukan Tujuan';
+        if (labelEl) labelEl.innerText = type === 'origin' ? 'Lokasi Jemput' : 'Lokasi Tujuan';
+        if (addrEl) addrEl.innerText = 'Geser peta untuk memilih lokasi...';
 
         history.pushState({ mapPicker: true }, '', '');
+
+        // FIX: Wait for modal to be visible AND have layout dimensions
+        // before initializing the picker map. The IntersectionObserver crash
+        // happens when google.maps.Map is created on a zero-size element.
+        setTimeout(function () {
+            var pickerEl = document.getElementById('picker-map');
+
+            // Guard: element must exist and have a rendered size
+            if (!pickerEl) {
+                console.error('picker-map element not found');
+                return;
+            }
+            if (pickerEl.offsetWidth === 0 || pickerEl.offsetHeight === 0) {
+                console.warn('picker-map has no dimensions yet, retrying...');
+                setTimeout(function () { window.APP_MAP._initPickerMap(type); }, 200);
+                return;
+            }
+
+            window.APP_MAP._initPickerMap(type);
+        }, 150);
+    },
+
+    // Separated so it can be retried cleanly
+    _initPickerMap: function (type) {
+        var pickerEl = document.getElementById('picker-map');
+        if (!pickerEl) return;
+
+        var mapSettings = window.APP_MAP.getServiceMapSettings(window.APP.service);
+
+        if (!pickerMap) {
+            pickerMap = new google.maps.Map(pickerEl, {
+                center: mapSettings.center,
+                zoom: mapSettings.zoom + 4,
+                gestureHandling: 'greedy',
+                disableDefaultUI: true,
+                clickableIcons: false,
+                zoomControl: true
+            });
+            window.APP.pickerMap = pickerMap;
+
+            pickerMap.addListener('idle', function () {
+                var center = pickerMap.getCenter();
+                window.APP.picker.currentLocation = { lat: center.lat(), lng: center.lng() };
+            });
+        }
+
+        // Trigger resize so tiles render correctly after modal animation
+        google.maps.event.trigger(pickerMap, 'resize');
+
+        // Center on existing place or user location
+        var field = type === 'origin' ? 'origin' : 'dest';
+        var existingPlace = window.APP.places[field];
+
+        if (existingPlace && existingPlace.geometry) {
+            var lat = existingPlace.geometry.location.lat();
+            var lng = existingPlace.geometry.location.lng();
+            window.APP.picker.currentLocation = { lat: lat, lng: lng };
+            pickerMap.setCenter({ lat: lat, lng: lng });
+            pickerMap.setZoom(18);
+        } else if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                function (pos) {
+                    var lat = pos.coords.latitude;
+                    var lng = pos.coords.longitude;
+                    window.APP.picker.currentLocation = { lat: lat, lng: lng };
+                    pickerMap.setCenter({ lat: lat, lng: lng });
+                    pickerMap.setZoom(18);
+                },
+                function () {
+                    window.APP.picker.currentLocation = mapSettings.center;
+                    pickerMap.setCenter(mapSettings.center);
+                    pickerMap.setZoom(mapSettings.zoom + 4);
+                }
+            );
+        } else {
+            window.APP.picker.currentLocation = mapSettings.center;
+            pickerMap.setCenter(mapSettings.center);
+            pickerMap.setZoom(mapSettings.zoom + 4);
+        }
     },
 
     closeMapPicker: function () {
         var modal = document.getElementById('map-picker-modal');
-        modal.classList.remove('active');
+        if (modal) modal.classList.remove('active');
         window.APP.picker.locked = false;
         window.APP.picker.activeField = null;
 
@@ -414,8 +439,8 @@ window.APP_MAP = {
 
         var confirmBtn = document.getElementById('confirm-btn');
         var addressDisplay = document.getElementById('picker-address');
-        confirmBtn.disabled = true;
-        addressDisplay.innerText = 'Mencari alamat...';
+        if (confirmBtn) confirmBtn.disabled = true;
+        if (addressDisplay) addressDisplay.innerText = 'Mencari alamat...';
 
         if (!geocoder) geocoder = new google.maps.Geocoder();
         var requestId = Date.now();
@@ -423,11 +448,10 @@ window.APP_MAP = {
 
         geocoder.geocode({ location: { lat: lat, lng: lng } }, function (results, status) {
             if (window.APP.picker.geocodeRequest !== requestId) return;
-
-            confirmBtn.disabled = false;
+            if (confirmBtn) confirmBtn.disabled = false;
 
             if (status !== 'OK' || !results[0]) {
-                addressDisplay.innerText = 'Gagal mendapatkan alamat. Coba lagi.';
+                if (addressDisplay) addressDisplay.innerText = 'Gagal mendapatkan alamat. Coba lagi.';
                 return;
             }
 
@@ -447,19 +471,19 @@ window.APP_MAP = {
         });
     },
 
-    // --- GPS ---
     getCurrentLocation: function (inputType) {
         if (window.APP.picker.locked) return;
         if (!navigator.geolocation) { alert('Browser tidak support GPS'); return; }
 
         var btnEl = document.getElementById('gps-' + inputType);
+        if (!btnEl) return;
         var original = btnEl.innerHTML;
         btnEl.innerHTML = '⏳ Tunggu...';
 
         var field = inputType === 'origin' ? 'pickup' : 'dropoff';
-        var existing = window.APP.state[field]; // Use APP.state
+        var existing = window.APP.state[field];
 
-        if (existing.source === 'manual' && existing.lat) {
+        if (existing && existing.source === 'manual' && existing.lat) {
             btnEl.innerHTML = original;
             alert('Lokasi sudah diatur manual. Hapus dulu untuk gunakan GPS.');
             return;
@@ -495,7 +519,7 @@ window.APP_MAP = {
     }
 };
 
-// 3. Export Global Helpers 
+// ─── 3. GLOBAL HELPERS (called from HTML onclick="...") ──────────────────────
 window.useHistory = window.APP_MAP.useHistory;
 window.openMapPicker = window.APP_MAP.openMapPicker;
 window.closeMapPicker = window.APP_MAP.closeMapPicker;
@@ -503,13 +527,13 @@ window.confirmLocation = window.APP_MAP.confirmLocation;
 window.getCurrentLocation = window.APP_MAP.getCurrentLocation;
 window.getServiceMapSettings = window.APP_MAP.getServiceMapSettings;
 
-// Other simple UI helpers
 window.expandMap = function () {
-    document.getElementById('map-container').classList.add('expanded');
+    var c = document.getElementById('map-container');
+    if (c) c.classList.add('expanded');
 };
 
 window.setActiveField = function (field) {
-    if (window.APP.picker) window.APP.picker.activeField = field;
+    if (window.APP && window.APP.picker) window.APP.picker.activeField = field;
 };
 
 window.toggleClearBtn = function (id) {
@@ -521,6 +545,7 @@ window.toggleClearBtn = function (id) {
 
 window.clearInput = function (id) {
     var input = document.getElementById(id);
+    if (!input) return;
     input.value = '';
     window.toggleClearBtn(id);
 
@@ -540,7 +565,6 @@ window.clearInput = function (id) {
         document.getElementById('price-card').style.display = 'none';
         document.getElementById('error-card').style.display = 'none';
         window.APP.picker.geocodeRequest = null;
-
         window.updateLink();
     }
 };
@@ -568,6 +592,7 @@ window.handleInput = function (id) {
 
 window.addNote = function (text) {
     var noteInput = document.getElementById('note');
+    if (!noteInput) return;
     noteInput.value = noteInput.value.length > 0 ? noteInput.value + ', ' + text : text;
     noteInput.style.height = 'auto';
     noteInput.style.height = (noteInput.scrollHeight) + 'px';
@@ -587,26 +612,28 @@ window.handleCarOptionChange = function () {
 
 window.addEventListener('popstate', function (event) {
     var modal = document.getElementById('map-picker-modal');
-    if (modal.classList.contains('active')) {
+    if (modal && modal.classList.contains('active')) {
         window.APP_MAP.closeMapPicker();
         event.preventDefault();
     }
 });
 
-// 4. Strengthen initMap (Called by Google Maps callback)
+// ─── 4. initMap — CALLED BY GOOGLE MAPS CALLBACK ─────────────────────────────
+// All `new google.maps.*` instantiation happens HERE, never at top level.
 function initMap() {
-    console.log('Initializing Map...');
+    console.log('[initMap] Google Maps API ready.');
 
-    // Safety check: ensure map element exists
     if (!document.getElementById('map')) {
-        console.warn('Map element not found, skipping init.');
+        console.warn('[initMap] #map element not found, skipping.');
         return;
     }
 
     try {
-        var mapSettings = window.APP_MAP.getServiceMapSettings(window.APP.service);
+        var mapSettings = window.APP_MAP.getServiceMapSettings(
+            window.APP ? window.APP.service : 'RIDE'
+        );
 
-        // Initialize Map
+        // ── Main map ──
         map = new google.maps.Map(document.getElementById('map'), {
             center: mapSettings.center,
             zoom: mapSettings.zoom,
@@ -622,10 +649,11 @@ function initMap() {
             streetViewControl: false,
             fullscreenControl: false
         });
-        window.APP.map = map; // Export
+        window.APP.map = map;
 
-        // Initialize Directions
-        dr = new google.maps.DirectionsRenderer({
+        // ── Directions ──
+        directionsService = new google.maps.DirectionsService();
+        directionsRenderer = new google.maps.DirectionsRenderer({
             suppressMarkers: true,
             preserveViewport: true,
             polylineOptions: {
@@ -634,15 +662,22 @@ function initMap() {
                 strokeOpacity: 0.8
             }
         });
-        window.APP.directionsRenderer = dr; // Export
-        dr.setMap(map);
+        directionsRenderer.setMap(map);
+        window.APP.directionsRenderer = directionsRenderer;
 
-        // Initialize other services (lazy init usually better, but init here ok)
-        // Auto-complete (dependent on map bounds)
-        window.APP_MAP.initAutocomplete();
+        // ── Geocoder ──
+        geocoder = new google.maps.Geocoder();
+
+        // ── Autocomplete — deferred one tick so Maps API internals settle ──
+        // This is the fix for "Cannot access 'Ea' before initialization".
+        setTimeout(function () {
+            window.APP_MAP.initAutocomplete();
+        }, 0);
+
+        // ── History chip ──
         window.APP_MAP.checkHistory();
 
-        // Note resize listener
+        // ── Note textarea auto-resize ──
         var noteInput = document.getElementById('note');
         if (noteInput) {
             noteInput.addEventListener('input', function () {
@@ -652,23 +687,23 @@ function initMap() {
             });
         }
 
-        // CRITICAL FIX: Safe Call setService
+        // ── Set initial service tab — safe call ──
         if (window.setService) {
             window.setService('RIDE', document.querySelector('.tab'));
         } else if (window.APP && window.APP.setService) {
             window.APP.setService('RIDE', document.querySelector('.tab'));
         } else {
-            // Defer execution if app.js not loaded yet
-            console.warn('setService missing, deferring tab init...');
-            setTimeout(() => {
+            setTimeout(function () {
                 if (window.setService) window.setService('RIDE', document.querySelector('.tab'));
             }, 500);
         }
 
-    } catch (error) {
-        console.error('CRITICAL: Map initialization failed.', error);
+        console.log('[initMap] Map initialized successfully.');
+
+    } catch (err) {
+        console.error('[initMap] CRITICAL: Map initialization failed.', err);
     }
 }
 
-// 5. Explicit Binding
+// ─── 5. EXPLICIT BINDING (must be at bottom, after function declaration) ──────
 window.initMap = initMap;
