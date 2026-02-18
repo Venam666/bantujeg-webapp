@@ -128,13 +128,11 @@ window.APP = {
             });
 
             if (res.status === 401 || res.status === 403) {
-                // Session token expired. bj_phone is permanent — never delete it.
-                // Remove only the dead token. Trigger silent refresh.
-                console.warn('[ORDERS] 401 on /orders/active. Token expired — triggering silent refresh.');
+                // Session expired — stop polling. auth.js handles session refresh.
+                // Never call silentRefresh() from here — it would fire on every poll cycle.
+                console.warn('[ORDERS] 401 on /orders/active. Sesi expired — menghentikan polling.');
                 localStorage.removeItem('bj_token');
-                if (window.APP_AUTH && window.APP_AUTH.silentRefresh) {
-                    window.APP_AUTH.silentRefresh();
-                }
+                window.APP.stopPolling();
                 return;
             }
 

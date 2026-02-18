@@ -87,6 +87,18 @@ window.APP_AUTH = {
     // Change 2: Silent refresh — sends new magic link WITHOUT showing login screen.
     // Triggered when session is expired/wiped from Firestore.
     silentRefresh: async function () {
+        // ── RATE-LIMIT GUARD ──────────────────────────────────────────────
+        var COOLDOWN_MS = 10 * 60 * 1000; // 10 menit
+        var lastRefresh = parseInt(localStorage.getItem('bj_last_refresh') || '0', 10);
+        var now = Date.now();
+        if (now - lastRefresh < COOLDOWN_MS) {
+            console.log('[AUTH] silentRefresh skipped — cooldown aktif (' +
+                Math.round((COOLDOWN_MS - (now - lastRefresh)) / 1000) + 's lagi)');
+            return;
+        }
+        localStorage.setItem('bj_last_refresh', String(now));
+        // ── END GUARD ─────────────────────────────────────────────────────
+
         var phone = localStorage.getItem('bj_phone');
 
         // If no phone stored, this is a truly new device — show login (first time only).
