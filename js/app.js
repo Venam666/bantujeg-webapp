@@ -26,22 +26,43 @@ window.APP = {
         // Force Hide Modal on Load
         window.closeQrisModal();
 
-        // Tabs
-        document.querySelectorAll('.tab').forEach(function (el) {
-            el.addEventListener('click', function () {
-                window.setService(this.dataset.service, this);
-            });
-        });
-
-        // Set Default Service
-        window.setService('RIDE', document.querySelector('.tab[data-service="RIDE"]'));
-
         // Mobile Menu Placeholder
         var menuBtn = document.getElementById('menu-btn');
         if (menuBtn) menuBtn.addEventListener('click', function () { alert('Fitur ini belum tersedia.'); });
 
-        // STRICT: Fetch Active Order
+        // Set Default Service
+        window.setService('RIDE', document.querySelector('.tab[data-service="RIDE"]') || document.querySelector('.tab'));
+
+        // STRICT: Fetch Active Order on every load
         window.APP.fetchActiveOrder();
+    },
+
+    // ─── SERVICE SWITCHER ─────────────────────────────────────────────────────
+    setService: function (service, tabEl) {
+        window.APP.service = service;
+
+        // Tab highlight
+        document.querySelectorAll('.tab').forEach(function (t) { t.classList.remove('active'); });
+        if (tabEl) tabEl.classList.add('active');
+
+        // Show/hide jastip fields
+        var jastipField = document.getElementById('jastip-field');
+        if (jastipField) {
+            jastipField.style.display = (service === 'FOOD_MART') ? 'block' : 'none';
+        }
+
+        // Show/hide car options
+        var carOptions = document.getElementById('car-options');
+        if (carOptions) {
+            carOptions.style.display = (service === 'CAR') ? 'block' : 'none';
+        }
+
+        // Recalculate price if route is already set
+        if (window.APP.places && window.APP.places.origin && window.APP.places.dest) {
+            if (window.APP_MAP && window.APP_MAP.drawRoute) {
+                window.APP_MAP.drawRoute();
+            }
+        }
     },
 
     // ─── BACKEND SYNC ────────────────────────────────────────────────────────
@@ -50,7 +71,7 @@ window.APP = {
             var token = localStorage.getItem('bj_token');
             if (!token) return;
 
-            var apiUrl = (window.API_URL || 'http://localhost:8080');
+            var apiUrl = (window.API_URL || 'http://localhost:3000');
             var res = await fetch(apiUrl + '/orders/active', {
                 headers: { 'Authorization': 'Bearer ' + token }
             });
@@ -64,15 +85,87 @@ window.APP = {
             if (data && data.activeOrder) {
                 var order = data.activeOrder;
                 window.APP.activeOrder = order;
-
-                // STRICT RENDER: Only if WAITING_PAYMENT & Amount > 0
-                if (order.status === 'WAITING_PAYMENT' && order.payment && order.payment.expected_amount > 0) {
-                    window.openQrisModal(order);
-                }
+                window.APP.renderOrderState(order);
             }
         } catch (e) {
             console.error('Fetch active order failed', e);
         }
+    },
+
+    // ─── STATE RENDERER ───────────────────────────────────────────────────────
+    // Single function that decides what to show based on order status.
+    // Frontend NEVER guesses state — this is always driven by backend response.
+    renderOrderState: function (order) {
+        if (!order || !order.status) return;
+
+        var status = order.status;
+
+        if (status === 'WAITING_PAYMENT') {
+            // Guard: only show QRIS if amount is confirmed
+            if (order.payment && order.payment.expected_amount > 0) {
+                window.openQrisModal(order);
+            }
+            return;
+        }
+
+        if (['SEARCHING', 'ACCEPTED', 'PICKING_UP', 'ARRIVED', 'ON_RIDE', 'BUYING', 'DELIVERING'].includes(status)) {
+            window.APP.showStatusCard(order);
+            return;
+        }
+
+        if (['COMPLETED', 'CANCELLED', 'EXPIRED'].includes(status)) {
+            // Order is done — clear active state, show form
+            window.APP.activeOrder = null;
+            window.APP.hideStatusCard();
+            return;
+        }
+    },
+
+    // ─── STATUS CARD ─────────────────────────────────────────────────────────
+    showStatusCard: function (order) {
+        var card = document.getElementById('active-order-card');
+        var statusText = document.getElementById('order-status-text');
+        var orderIdText = document.getElementById('order-id-text');
+
+        if (!card) return;
+
+        var statusMessages = {
+            'SEARCHING': '🔍 Mencari driver terdekat...',
+            'ACCEPTED': '✅ Driver ditemukan! Sedang menuju lokasi jemput.',
+            'PICKING_UP': '🛵 Driver dalam perjalanan ke lokasi jemput.',
+            'ARRIVED': '📍 Driver sudah tiba! Segera keluar ya.',
+            'ON_RIDE': '🚀 Perjalanan sedang berlangsung.',
+            'BUYING': '🛒 Driver sedang berbelanja.',
+            'DELIVERING': '📦 Driver sedang mengantar.'
+        };
+
+        if (statusText) {
+            statusText.innerText = statusMessages[order.status] || ('Status: ' + order.status);
+        }
+        if (orderIdText) {
+            var id = order.orderId || order.order_id || '';
+            orderIdText.innerText = id ? ('ID Order: ' + id.substring(0, 8).toUpperCase()) : '';
+        }
+
+        // Hide the form, show the status card
+        var cardInterface = document.querySelector('.card-interface');
+        if (cardInterface) cardInterface.style.display = 'none';
+
+        var bottomBar = document.querySelector('.bottom-bar');
+        if (bottomBar) bottomBar.style.display = 'none';
+
+        card.style.display = 'flex';
+    },
+
+    hideStatusCard: function () {
+        var card = document.getElementById('active-order-card');
+        if (card) card.style.display = 'none';
+
+        var cardInterface = document.querySelector('.card-interface');
+        if (cardInterface) cardInterface.style.display = '';
+
+        var bottomBar = document.querySelector('.bottom-bar');
+        if (bottomBar) bottomBar.style.display = '';
     },
 
     // ─── SUBMIT FLOW ─────────────────────────────────────────────────────────
@@ -89,9 +182,8 @@ window.APP = {
 
         // 2. Lock UI
         var btn = document.getElementById('btn-submit');
-        var originalText = btn.innerText;
-        btn.disabled = true;
-        btn.innerText = '⏳ Memproses...';
+        var originalText = btn ? btn.innerText : '';
+        if (btn) { btn.disabled = true; btn.innerText = '⏳ Memproses...'; }
 
         try {
             var paymentSelect = document.getElementById('payment-method');
@@ -104,33 +196,85 @@ window.APP = {
                 response = await window.APP.createCashOrder();
             }
 
-            if (!response) throw new Error('No response');
+            if (!response) throw new Error('No response from server');
 
-            // 3. Handle Response
+            if (response.error) throw new Error(response.error);
+
+            // 3. Handle Response — always use renderOrderState
             if (response.status === 'WAITING_PAYMENT' && response.payment && response.payment.expected_amount > 0) {
-                // Success QRIS
+                window.APP.activeOrder = response;
                 window.openQrisModal(response);
             } else if (response.status === 'SEARCHING') {
-                // Success CASH
-                alert('Order berhasil! ID: ' + (response.orderId || response.order_id));
-                window.APP.fetchActiveOrder();
-            } else if (response.error) {
-                throw new Error(response.error);
+                window.APP.activeOrder = response;
+                window.APP.showStatusCard(response);
             } else {
-                // Fallback / Unknown state
-                alert('Order status: ' + (response.status || 'Unknown'));
-                window.APP.fetchActiveOrder();
+                // Unknown state — refetch from backend to get authoritative state
+                await window.APP.fetchActiveOrder();
             }
 
         } catch (e) {
             console.error(e);
             alert('Gagal membuat order: ' + e.message);
         } finally {
-            // Unlock UI
-            if (btn) {
-                btn.disabled = false;
-                btn.innerText = originalText;
+            if (btn) { btn.disabled = false; btn.innerText = originalText; }
+        }
+    },
+
+    // ─── PRICING PREVIEW ─────────────────────────────────────────────────────
+    // Called by map.js after route is calculated. Returns backend-authoritative price.
+    fetchPricePreview: async function (pickupLocation, dropoffLocation, distanceKm) {
+        try {
+            var apiUrl = (window.API_URL || 'http://localhost:3000');
+            var res = await fetch(apiUrl + '/pricing/preview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    service: window.APP.service,
+                    pickupLocation: pickupLocation,
+                    dropoffLocation: dropoffLocation
+                })
+            });
+
+            if (!res.ok) throw new Error('Preview failed: ' + res.status);
+            var data = await res.json();
+
+            if (data && data.success && data.price > 0) {
+                window.APP.calc.price = data.price;
+                window.APP.calc.distance = data.distanceKm || distanceKm || 0;
+
+                // Update UI
+                var fakePrice = Math.ceil((data.price * 1.10) / 500) * 500;
+                var priceDisplay = document.getElementById('price-display');
+                var fakeDisplay = document.getElementById('fake-price');
+                var distDisplay = document.getElementById('dist-display');
+                var priceCard = document.getElementById('price-card');
+
+                if (priceDisplay) priceDisplay.innerText = 'Rp ' + data.price.toLocaleString('id-ID');
+                if (fakeDisplay) fakeDisplay.innerText = 'Rp ' + fakePrice.toLocaleString('id-ID');
+                if (distDisplay) distDisplay.innerText = (data.distanceKm || distanceKm || 0).toFixed(1) + ' km';
+                if (priceCard) priceCard.style.display = 'flex';
+
+                // Update submit button
+                window.APP.updateSubmitButton();
+                return data.price;
             }
+        } catch (e) {
+            console.warn('[PRICING] Backend preview failed, using local fallback:', e.message);
+        }
+        return null;
+    },
+
+    updateSubmitButton: function () {
+        var btn = document.getElementById('btn-submit');
+        var btnText = document.getElementById('btn-text');
+        if (!btn || !btnText) return;
+
+        if (window.APP.calc.price > 0 && window.APP.state.pickup.lat && window.APP.state.dropoff.lat) {
+            btn.classList.remove('disabled');
+            btnText.innerText = 'Pesan Sekarang →';
+        } else {
+            btn.classList.add('disabled');
+            btnText.innerText = 'Isi Lokasi Dulu';
         }
     },
 
@@ -140,12 +284,17 @@ window.APP = {
             service: window.APP.service,
             customer_phone: localStorage.getItem('bj_phone') || '080000000000',
             session_key: localStorage.getItem('bj_token'),
-            pickupLocation: window.APP.state.pickup,
-            dropoffLocation: window.APP.state.dropoff,
+            pickupLocation: {
+                lat: window.APP.state.pickup.lat,
+                lng: window.APP.state.pickup.lng
+            },
+            dropoffLocation: {
+                lat: window.APP.state.dropoff.lat,
+                lng: window.APP.state.dropoff.lng
+            },
             origin: window.APP.state.pickup.address,
             destination: window.APP.state.dropoff.address,
-            note: document.getElementById('note').value,
-            price: window.APP.calc.price,
+            note: document.getElementById('note') ? document.getElementById('note').value : '',
             // Extras for food/mart
             items: document.getElementById('items') ? document.getElementById('items').value : '',
             estPrice: document.getElementById('est-price') ? document.getElementById('est-price').value : ''
@@ -165,7 +314,7 @@ window.APP = {
     },
 
     _post: async function (endpoint, payload) {
-        var apiUrl = (window.API_URL || 'http://localhost:8080');
+        var apiUrl = (window.API_URL || 'http://localhost:3000');
         var token = localStorage.getItem('bj_token');
         var res = await fetch(apiUrl + endpoint, {
             method: 'POST',
@@ -186,7 +335,7 @@ window.APP = {
 
     // ─── MODAL CONTROLLERS (STRICT) ──────────────────────────────────────────
     openQrisModal: function (order) {
-        // HARD GUARDS
+        // HARD GUARDS — QRIS modal NEVER auto-appears
         if (!order) return;
         if (order.status !== 'WAITING_PAYMENT') return;
         if (!order.payment) return;
@@ -197,16 +346,14 @@ window.APP = {
 
         if (amountEl && modal) {
             amountEl.innerText = 'Rp ' + (order.payment.expected_amount).toLocaleString('id-ID');
-
             modal.classList.remove('hidden');
-            modal.style.display = 'flex'; // Explicitly set flex for centering
+            modal.style.display = 'flex';
 
             // Bind Done Button
             var doneBtn = document.getElementById('btn-qris-done');
             if (doneBtn) {
                 doneBtn.onclick = function () {
                     window.closeQrisModal();
-                    // Refetch status to see if paid
                     window.APP.fetchActiveOrder();
                     alert('Terima kasih. Kami sedang mengecek pembayaran Anda.');
                 };
@@ -218,14 +365,14 @@ window.APP = {
         var modal = document.getElementById('modal-qris');
         if (modal) {
             modal.classList.add('hidden');
-            modal.style.display = 'none'; // Force hide
+            modal.style.display = 'none';
         }
     }
 };
 
 // ─── GLOBAL BINDINGS ────────────────────────────────────────────────────────
-window.setService = window.APP.setService; // Rebind if needed by HTML
-window.updateLink = function () { };
+window.setService = function (service, tabEl) { window.APP.setService(service, tabEl); };
+window.updateLink = function () { window.APP.updateSubmitButton(); };
 window.submitOrder = function () { window.APP.submitOrder(); };
 window.closeQrisModal = function () { window.APP.closeQrisModal(); };
 window.openQrisModal = function (o) { window.APP.openQrisModal(o); };

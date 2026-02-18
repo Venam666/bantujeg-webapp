@@ -198,6 +198,7 @@ window.APP_MAP = {
         document.getElementById('price-display').innerText = 'Rp ' + price.toLocaleString('id-ID');
         document.getElementById('dist-display').innerText = distance.toFixed(1) + ' km';
         document.getElementById('price-card').style.display = 'flex';
+        if (window.APP && window.APP.updateSubmitButton) window.APP.updateSubmitButton();
         window.updateLink();
     },
 
@@ -279,9 +280,28 @@ window.APP_MAP = {
             window.APP.calc = { distance: parseFloat(finalKm.toFixed(2)), duration: durationMins };
             document.getElementById('dist-display').innerText = window.APP.calc.distance.toFixed(1) + ' km (' + durationMins + ' mnt)';
 
-            window.APP_MAP.calculatePrice(finalKm);
-            document.getElementById('price-card').style.display = 'flex';
-            window.updateLink();
+            // Try backend pricing preview first (authoritative price)
+            var pickup = window.APP.state.pickup;
+            var dropoff = window.APP.state.dropoff;
+
+            if (pickup && pickup.lat && dropoff && dropoff.lat && window.APP.fetchPricePreview) {
+                window.APP.fetchPricePreview(
+                    { lat: pickup.lat, lng: pickup.lng },
+                    { lat: dropoff.lat, lng: dropoff.lng },
+                    finalKm
+                ).then(function (backendPrice) {
+                    if (!backendPrice) {
+                        // Backend failed — fall back to local calculation
+                        window.APP_MAP.calculatePrice(finalKm);
+                    }
+                    document.getElementById('price-card').style.display = 'flex';
+                    window.updateLink();
+                });
+            } else {
+                window.APP_MAP.calculatePrice(finalKm);
+                document.getElementById('price-card').style.display = 'flex';
+                window.updateLink();
+            }
         });
     },
 

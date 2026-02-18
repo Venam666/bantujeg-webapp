@@ -58,10 +58,11 @@
             </div>
 
             <div class="tabs">
-                <div class="tab active" onclick="setService('RIDE', this)">🛵 OJEK</div>
-                <div class="tab" onclick="setService('SEND', this)">📦 SEND</div>
-                <div class="tab" onclick="setService('FOOD_MART', this)">🍜 FOOD &amp; MART</div>
-                <div class="tab" onclick="setService('CAR', this)">🚗 MOBIL</div>
+                <div class="tab active" data-service="RIDE" onclick="setService('RIDE', this)">🛵 OJEK</div>
+                <div class="tab" data-service="SEND" onclick="setService('SEND', this)">📦 SEND</div>
+                <div class="tab" data-service="FOOD_MART" onclick="setService('FOOD_MART', this)">🍜 FOOD &amp; MART
+                </div>
+                <div class="tab" data-service="CAR" onclick="setService('CAR', this)">🚗 MOBIL</div>
             </div>
 
             <div class="input-group">
@@ -186,6 +187,26 @@
         </div>
 
     </div><!-- /#view-main -->
+
+    <!-- ========================
+         ACTIVE ORDER STATUS CARD
+         Shown when an order is active (SEARCHING, ACCEPTED, ON_RIDE, etc.)
+         Hidden by default — controlled strictly by app.js renderOrderState()
+         ======================== -->
+    <div id="active-order-card"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:#f8f9fa; z-index:100; flex-direction:column; align-items:center; justify-content:center; padding:32px; box-sizing:border-box; font-family:'Plus Jakarta Sans',sans-serif;">
+        <div style="font-size:3rem; margin-bottom:16px;">🛵</div>
+        <div id="order-status-text"
+            style="font-size:1.2rem; font-weight:700; color:#1a1a1a; text-align:center; margin-bottom:8px;">Mencari
+            driver...</div>
+        <div id="order-id-text" style="font-size:0.85rem; color:#888; margin-bottom:32px;"></div>
+        <p style="font-size:0.9rem; color:#555; text-align:center; max-width:280px; line-height:1.6;">Pantau status
+            ordermu lewat WhatsApp. Kamu bisa tutup halaman ini.</p>
+        <div
+            style="margin-top:24px; background:#e8f5e9; border-radius:12px; padding:16px; max-width:300px; text-align:center;">
+            <div style="font-size:0.8rem; color:#2e7d32; font-weight:600;">💬 Notifikasi dikirim ke WhatsApp kamu</div>
+        </div>
+    </div>
 
     <!-- Map Picker Modal (outside view-main so it always overlays) -->
     <div id="map-picker-modal">
