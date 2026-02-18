@@ -555,6 +555,8 @@ window.APP = {
         return {
             service: window.APP.service,
             customer_phone: localStorage.getItem('bj_phone') || '',
+            session_key: localStorage.getItem('bj_token') || '',  // W-P1: enables session-based order lookup
+            source: 'webapp',                                       // W-P1: identifies origin
             pickupLocation: {
                 lat: window.APP.state.pickup.lat,
                 lng: window.APP.state.pickup.lng
