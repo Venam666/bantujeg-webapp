@@ -104,6 +104,8 @@ window.APP = {
 
             if (res.status === 401 || res.status === 403) {
                 localStorage.removeItem('bj_token');
+                localStorage.removeItem('bj_phone');
+                if (window.APP_AUTH && window.APP_AUTH.showLogin) window.APP_AUTH.showLogin();
                 return;
             }
 

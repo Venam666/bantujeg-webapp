@@ -1,5 +1,7 @@
 /* ========================
-   auth.js - The Login Cables
+   auth.js - Identity Layer
+   Rule: User stays logged in forever.
+   Only 401 from backend clears identity.
    ======================== */
 
 // 1. Global API Configuration
@@ -7,41 +9,82 @@ window.API_URL = window.location.hostname === 'localhost' || window.location.hos
     ? 'http://localhost:3000'
     : 'https://tanganbantu-backend-422725955268.asia-southeast2.run.app';
 
-console.log('API URL set to:', window.API_URL);
+console.log('[AUTH] API URL:', window.API_URL);
 
 // 2. Define Namespace
 window.APP_AUTH = {
 
     // --- View toggling helpers ---
     showLogin: function () {
-        const loginView = document.getElementById('view-login');
-        const mainView = document.getElementById('view-main');
+        var loginView = document.getElementById('view-login');
+        var mainView = document.getElementById('view-main');
         if (loginView) loginView.style.display = 'flex';
         if (mainView) mainView.style.display = 'none';
     },
 
     showMain: function () {
-        const loginView = document.getElementById('view-login');
-        const mainView = document.getElementById('view-main');
+        var loginView = document.getElementById('view-login');
+        var mainView = document.getElementById('view-main');
         if (loginView) loginView.style.display = 'none';
         if (mainView) mainView.style.display = 'block';
 
         // Trigger map resize when showing main view to prevent gray box
-        setTimeout(() => {
+        setTimeout(function () {
             if (window.APP && window.APP.map) {
                 google.maps.event.trigger(window.APP.map, 'resize');
             }
         }, 100);
     },
 
-    // --- Check URL for magic link token ---
+    // --- Clear identity (only on explicit logout or 401) ---
+    clearIdentity: function () {
+        localStorage.removeItem('bj_token');
+        localStorage.removeItem('bj_phone');
+    },
+
+    // --- Silent session validation via GET /auth/me ---
+    // Called after showing main (optimistic). Only reacts to 401.
+    validateSession: async function () {
+        var token = localStorage.getItem('bj_token');
+        if (!token) return;
+
+        try {
+            var res = await fetch(window.API_URL + '/auth/me', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+
+            if (res.status === 401) {
+                // Session expired or invalid — only case where we clear identity
+                console.warn('[AUTH] Session invalid (401). Clearing identity.');
+                window.APP_AUTH.clearIdentity();
+                window.APP_AUTH.showLogin();
+                return;
+            }
+
+            if (res.ok) {
+                var data = await res.json();
+                // Refresh phone in storage in case it was missing
+                if (data && data.phone) {
+                    localStorage.setItem('bj_phone', data.phone);
+                }
+                console.log('[AUTH] Session valid. Identity confirmed:', data.phone);
+            }
+            // Any other error (500, network) — do nothing. Stay logged in.
+            // Backend is down ≠ user is logged out.
+        } catch (e) {
+            // Network error — do NOT clear token. Stay logged in.
+            console.warn('[AUTH] /auth/me unreachable. Staying logged in.', e.message);
+        }
+    },
+
+    // --- Main init: called on DOMContentLoaded ---
     init: function () {
         var params = new URLSearchParams(window.location.search);
         var token = params.get('token');
 
+        // CASE 1: Magic link in URL — verify it
         if (token) {
-            console.log('Verifying token:', token);
-            // Verify the token with backend
+            console.log('[AUTH] Magic link token found. Verifying...');
             fetch(window.API_URL + '/auth/verify', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -49,9 +92,8 @@ window.APP_AUTH = {
             })
                 .then(function (res) {
                     if (!res.ok) {
-                        // Pre-flight check for 404 or other errors
                         return res.text().then(function (text) {
-                            console.error('Auth Verify Failed:', res.status, text.substring(0, 100));
+                            console.error('[AUTH] Verify failed:', res.status, text.substring(0, 100));
                             throw new Error('Server responded with ' + res.status);
                         });
                     }
@@ -59,55 +101,69 @@ window.APP_AUTH = {
                 })
                 .then(function (data) {
                     if (data && data.success) {
-                        console.log('Verification successful', data);
-                        localStorage.setItem('bj_token', data.session_key || token);
-                        localStorage.setItem('bj_phone', data.phone || '');
+                        // sessionToken is the Firestore session key
+                        var sessionToken = data.sessionToken || data.session_key || token;
+                        var phone = (data.customer && data.customer.phone) || data.phone || '';
 
-                        // Clean URL
+                        localStorage.setItem('bj_token', sessionToken);
+                        if (phone) localStorage.setItem('bj_phone', phone);
+
+                        // Clean URL — remove ?token= from address bar
                         history.replaceState({}, document.title, window.location.pathname);
+
+                        console.log('[AUTH] Magic link verified. Identity locked.');
                         window.APP_AUTH.showMain();
                     } else {
-                        console.warn('Verification failed logic:', data);
-                        alert('Link masuk tidak valid atau sudah kadaluarsa. Coba minta lagi ya.');
+                        console.warn('[AUTH] Verification logic failed:', data);
+                        if (window.showToast) window.showToast('Link tidak valid atau sudah dipakai. Minta link baru ya.');
+                        else alert('Link masuk tidak valid atau sudah kadaluarsa. Coba minta lagi ya.');
                         window.APP_AUTH.showLogin();
                     }
                 })
                 .catch(function (err) {
-                    console.error('Auth verify error:', err);
-                    alert('Gagal memverifikasi. Cek koneksi internet kamu.');
+                    console.error('[AUTH] Verify error:', err);
+                    if (window.showToast) window.showToast('Gagal memverifikasi. Cek koneksi internet kamu.');
+                    else alert('Gagal memverifikasi. Cek koneksi internet kamu.');
                     window.APP_AUTH.showLogin();
                 });
             return; // Wait for async verify
         }
 
-        // --- Check localStorage for existing session ---
+        // CASE 2: Token in localStorage — show main immediately, validate silently
         var savedToken = localStorage.getItem('bj_token');
-        var savedPhone = localStorage.getItem('bj_phone');
-
-        if (savedToken && savedPhone) {
-            console.log('Session found, showing main app.');
+        if (savedToken) {
+            console.log('[AUTH] Existing session found. Showing app immediately.');
             window.APP_AUTH.showMain();
-        } else {
-            console.log('No session, showing login.');
-            window.APP_AUTH.showLogin();
+            // Silent background validation — only clears on 401
+            window.APP_AUTH.validateSession();
+            return;
         }
+
+        // CASE 3: No token at all — show login
+        console.log('[AUTH] No session. Showing login.');
+        window.APP_AUTH.showLogin();
     },
 
     // --- Request login (send magic link) ---
     requestLogin: function () {
         var phoneInput = document.getElementById('phone-input');
-        var phone = phoneInput.value.trim();
+        var phone = phoneInput ? phoneInput.value.trim() : '';
 
         if (!phone) {
-            alert('Masukkan nomor HP dulu ya Kak!');
+            if (window.showToast) window.showToast('Masukkan nomor HP dulu ya Kak!');
+            else alert('Masukkan nomor HP dulu ya Kak!');
             return;
         }
 
-        // Basic formatting
+        // Normalize phone
         if (phone.startsWith('0')) phone = '62' + phone.slice(1);
         if (!phone.startsWith('62')) phone = '62' + phone;
 
-        console.log('Requesting login for:', phone);
+        console.log('[AUTH] Requesting magic link for:', phone);
+
+        // Disable button while sending
+        var btn = document.querySelector('.btn-login');
+        if (btn) { btn.disabled = true; btn.innerText = '⏳ Mengirim...'; }
 
         fetch(window.API_URL + '/auth/request-login', {
             method: 'POST',
@@ -117,39 +173,42 @@ window.APP_AUTH = {
             .then(function (res) {
                 if (!res.ok) {
                     return res.text().then(function (text) {
-                        console.error('Request Login Failed:', res.status, text.substring(0, 100));
+                        console.error('[AUTH] Request login failed:', res.status, text.substring(0, 100));
                         throw new Error('Server responded with ' + res.status);
                     });
                 }
                 return res.json();
             })
             .then(function (data) {
+                if (btn) { btn.disabled = false; btn.innerText = 'Kirim Magic Link →'; }
                 if (data && data.success) {
-                    alert('Magic link sudah dikirim ke WhatsApp kamu! 🎉 Cek sekarang.');
+                    if (window.showToast) window.showToast('Magic link dikirim ke WhatsApp kamu! 🎉 Cek sekarang.', 5000);
+                    else alert('Magic link sudah dikirim ke WhatsApp kamu! 🎉 Cek sekarang.');
                 } else {
-                    alert(data.message || 'Gagal mengirim link. Coba lagi.');
+                    if (window.showToast) window.showToast(data.message || 'Gagal mengirim link. Coba lagi.');
+                    else alert(data.message || 'Gagal mengirim link. Coba lagi.');
                 }
             })
             .catch(function (err) {
-                console.error('Request login error:', err);
-                alert('Gagal terhubung ke server. Cek koneksi internet kamu.');
+                if (btn) { btn.disabled = false; btn.innerText = 'Kirim Magic Link →'; }
+                console.error('[AUTH] Request login error:', err);
+                if (window.showToast) window.showToast('Gagal terhubung ke server. Cek koneksi internet kamu.');
+                else alert('Gagal terhubung ke server. Cek koneksi internet kamu.');
             });
     },
 
-    // --- Logout helper ---
+    // --- Logout: only explicit user action ---
     logout: function () {
-        localStorage.removeItem('bj_token');
-        localStorage.removeItem('bj_phone');
+        window.APP_AUTH.clearIdentity();
         window.APP_AUTH.showLogin();
     }
 };
 
-// 3. Initialize & Export
-// Use DOMContentLoaded to ensure elements exist before init runs if script is in head (defer helps, but safety first)
+// 3. Initialize on DOM ready
 document.addEventListener('DOMContentLoaded', function () {
     window.APP_AUTH.init();
 });
 
-// Export functions to global scope for HTML event handlers
-window.requestLogin = window.APP_AUTH.requestLogin;
-window.logout = window.APP_AUTH.logout;
+// 4. Export to global scope for HTML event handlers
+window.requestLogin = function () { window.APP_AUTH.requestLogin(); };
+window.logout = function () { window.APP_AUTH.logout(); };
