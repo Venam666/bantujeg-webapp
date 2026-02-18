@@ -1,5 +1,5 @@
 /* ========================
-   app.js - The Brains (Strict Backend-Driven)
+   app.js - Strict Payment Flow
    ======================== */
 
 window.APP = {
@@ -19,30 +19,28 @@ window.APP = {
         geocodeRequest: null
     },
     carOptions: { seats: 4, toll: false },
-    historyData: null,
-    activeOrder: null, // New: Store active order from backend
+    activeOrder: null,
 
     // ─── STARTUP ─────────────────────────────────────────────────────────────
     initApp: function () {
-        // Service Tabs
+        // Force Hide Modal on Load
+        window.closeQrisModal();
+
+        // Tabs
         document.querySelectorAll('.tab').forEach(function (el) {
             el.addEventListener('click', function () {
                 window.setService(this.dataset.service, this);
             });
         });
 
-        // Mobile Menu
-        var menuBtn = document.getElementById('menu-btn');
-        if (menuBtn) {
-            menuBtn.addEventListener('click', function () {
-                alert('Menu fitur belum tersedia di MVP ini.');
-            });
-        }
-
-        // Default to RIDE
+        // Set Default Service
         window.setService('RIDE', document.querySelector('.tab[data-service="RIDE"]'));
 
-        // STRICT: Fetch Active Order on Load
+        // Mobile Menu Placeholder
+        var menuBtn = document.getElementById('menu-btn');
+        if (menuBtn) menuBtn.addEventListener('click', function () { alert('Fitur ini belum tersedia.'); });
+
+        // STRICT: Fetch Active Order
         window.APP.fetchActiveOrder();
     },
 
@@ -50,7 +48,7 @@ window.APP = {
     fetchActiveOrder: async function () {
         try {
             var token = localStorage.getItem('bj_token');
-            if (!token) return; // No session, stay on main form
+            if (!token) return;
 
             var apiUrl = (window.API_URL || 'http://localhost:8080');
             var res = await fetch(apiUrl + '/orders/active', {
@@ -58,226 +56,179 @@ window.APP = {
             });
 
             if (res.status === 401 || res.status === 403) {
-                // Token invalid/expired -> clear and stay on main
                 localStorage.removeItem('bj_token');
                 return;
             }
 
             var data = await res.json();
             if (data && data.activeOrder) {
-                window.APP.activeOrder = data.activeOrder;
-                window.APP.renderState(data.activeOrder);
+                var order = data.activeOrder;
+                window.APP.activeOrder = order;
+
+                // STRICT RENDER: Only if WAITING_PAYMENT & Amount > 0
+                if (order.status === 'WAITING_PAYMENT' && order.payment && order.payment.expected_amount > 0) {
+                    window.openQrisModal(order);
+                }
             }
         } catch (e) {
-            console.error('Failed to fetch active order:', e);
-            // On error, we default to main form (safe fallback)
+            console.error('Fetch active order failed', e);
         }
     },
 
-    // ─── STATE RENDERER (CORE TRUTH) ─────────────────────────────────────────
-    renderState: function (order) {
-        if (!order) {
-            window.closeQrisModal();
+    // ─── SUBMIT FLOW ─────────────────────────────────────────────────────────
+    submitOrder: async function () {
+        // 1. Validate inputs
+        if (!window.APP.state.pickup.lat || !window.APP.state.dropoff.lat) {
+            alert('Lengkapi lokasi dulu ya!');
+            return;
+        }
+        if (!window.APP.calc.price || window.APP.calc.price <= 0) {
+            alert('Tunggu estimasi harga...');
             return;
         }
 
-        // 1. QRIS STATE
-        if (order.status === 'WAITING_PAYMENT' && order.payment && order.payment.expected_amount > 0) {
-            window.showQrisModal(order);
-        } else {
-            window.closeQrisModal();
-        }
+        // 2. Lock UI
+        var btn = document.getElementById('btn-submit');
+        var originalText = btn.innerText;
+        btn.disabled = true;
+        btn.innerText = '⏳ Memproses...';
 
-        // 2. SEARCHING STATE (Optional tracking UI)
-        if (order.status === 'SEARCHING') {
-            // Can show a toast or sticky footer
-            var btn = document.getElementById('btn-submit');
+        try {
+            var paymentSelect = document.getElementById('payment-method');
+            var method = paymentSelect ? paymentSelect.value : 'CASH';
+            var response = null;
+
+            if (method === 'QRIS') {
+                response = await window.APP.createQrisOrder();
+            } else {
+                response = await window.APP.createCashOrder();
+            }
+
+            if (!response) throw new Error('No response');
+
+            // 3. Handle Response
+            if (response.status === 'WAITING_PAYMENT' && response.payment && response.payment.expected_amount > 0) {
+                // Success QRIS
+                window.openQrisModal(response);
+            } else if (response.status === 'SEARCHING') {
+                // Success CASH
+                alert('Order berhasil! ID: ' + (response.orderId || response.order_id));
+                window.APP.fetchActiveOrder();
+            } else if (response.error) {
+                throw new Error(response.error);
+            } else {
+                // Fallback / Unknown state
+                alert('Order status: ' + (response.status || 'Unknown'));
+                window.APP.fetchActiveOrder();
+            }
+
+        } catch (e) {
+            console.error(e);
+            alert('Gagal membuat order: ' + e.message);
+        } finally {
+            // Unlock UI
             if (btn) {
-                btn.innerText = 'Mencari Driver...';
-                btn.classList.add('disabled');
+                btn.disabled = false;
+                btn.innerText = originalText;
             }
         }
     },
 
-    // ─── API SEND HELPER ─────────────────────────────────────────────────────
-    sendOrderToBackend: function (payload, endpoint) {
-        if (window.isSubmitting) return;
-        window.isSubmitting = true;
+    // ─── API HELPERS ─────────────────────────────────────────────────────────
+    _buildPayload: function () {
+        return {
+            service: window.APP.service,
+            customer_phone: localStorage.getItem('bj_phone') || '080000000000',
+            session_key: localStorage.getItem('bj_token'),
+            pickupLocation: window.APP.state.pickup,
+            dropoffLocation: window.APP.state.dropoff,
+            origin: window.APP.state.pickup.address,
+            destination: window.APP.state.dropoff.address,
+            note: document.getElementById('note').value,
+            price: window.APP.calc.price,
+            // Extras for food/mart
+            items: document.getElementById('items') ? document.getElementById('items').value : '',
+            estPrice: document.getElementById('est-price') ? document.getElementById('est-price').value : ''
+        };
+    },
 
-        var btn = document.getElementById('btn-submit');
-        var originalText = btn ? btn.innerText : '';
-        if (btn) {
-            btn.innerText = '⏳ Memproses...';
-            btn.disabled = true;
-        }
+    createQrisOrder: async function () {
+        var payload = window.APP._buildPayload();
+        payload.paymentMethod = 'QRIS';
+        return await window.APP._post('/orders/qris', payload);
+    },
 
+    createCashOrder: async function () {
+        var payload = window.APP._buildPayload();
+        payload.paymentMethod = 'CASH';
+        return await window.APP._post('/orders/create', payload);
+    },
+
+    _post: async function (endpoint, payload) {
         var apiUrl = (window.API_URL || 'http://localhost:8080');
         var token = localStorage.getItem('bj_token');
-
-        fetch(apiUrl + endpoint, {
+        var res = await fetch(apiUrl + endpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': 'Bearer ' + token
             },
             body: JSON.stringify(payload)
-        })
-            .then(async function (res) {
-                if (!res.ok) {
-                    var text = await res.text();
-                    try { return JSON.parse(text); } catch (e) { throw new Error('Server Error: ' + res.status); }
-                }
-                return res.json();
-            })
-            .then(function (data) {
-                window.isSubmitting = false;
-                if (btn) {
-                    btn.innerText = originalText;
-                    btn.disabled = false;
-                }
+        });
 
-                if (data.activeOrder) {
-                    // Backend returned updated state directly?
-                    window.APP.activeOrder = data.activeOrder;
-                    window.APP.renderState(data.activeOrder);
-                } else if (data.orderId || data.order_id) {
-                    // Standard create response
-                    // Construct a temporary order object for immediate rendering if needed
-                    // But better to fetch active or trust the response structure
-                    // Assuming qris creates WAITING_PAYMENT
-                    var newOrder = {
-                        status: endpoint.includes('qris') ? 'WAITING_PAYMENT' : 'SEARCHING',
-                        payment: {
-                            expected_amount: data.expected_amount || data.payment?.expected_amount || 0
-                        },
-                        orderId: data.orderId || data.order_id
-                    };
-                    window.APP.renderState(newOrder);
+        var text = await res.text();
+        try {
+            return JSON.parse(text);
+        } catch (e) {
+            throw new Error('Server Error: ' + res.status);
+        }
+    },
 
-                    if (endpoint.includes('create')) {
-                        alert('Order berhasil dibuat! ID: ' + newOrder.orderId);
-                    }
-                } else if (data.success && endpoint.includes('qris')) {
-                    // Fallback if structure varies
-                    // Refetch to be sure
+    // ─── MODAL CONTROLLERS (STRICT) ──────────────────────────────────────────
+    openQrisModal: function (order) {
+        // HARD GUARDS
+        if (!order) return;
+        if (order.status !== 'WAITING_PAYMENT') return;
+        if (!order.payment) return;
+        if (!order.payment.expected_amount || order.payment.expected_amount <= 0) return;
+
+        var amountEl = document.getElementById('qris-amount');
+        var modal = document.getElementById('modal-qris');
+
+        if (amountEl && modal) {
+            amountEl.innerText = 'Rp ' + (order.payment.expected_amount).toLocaleString('id-ID');
+
+            modal.classList.remove('hidden');
+            modal.style.display = 'flex'; // Explicitly set flex for centering
+
+            // Bind Done Button
+            var doneBtn = document.getElementById('btn-qris-done');
+            if (doneBtn) {
+                doneBtn.onclick = function () {
+                    window.closeQrisModal();
+                    // Refetch status to see if paid
                     window.APP.fetchActiveOrder();
-                } else {
-                    alert('Gagal: ' + (data.message || 'Unknown error'));
-                }
-            })
-            .catch(function (error) {
-                window.isSubmitting = false;
-                if (btn) {
-                    btn.innerText = originalText;
-                    btn.disabled = false;
-                }
-                console.error('Submit Error:', error);
-                alert('Terjadi kesalahan koneksi.');
-            });
-    }
-};
+                    alert('Terima kasih. Kami sedang mengecek pembayaran Anda.');
+                };
+            }
+        }
+    },
 
-// ─── TOP LEVEL FUNCTIONS ────────────────────────────────────────────────────
-window.setService = function (serviceName, el) {
-    if (!serviceName) return;
-    window.APP.service = serviceName;
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    if (el) el.classList.add('active');
-
-    var extras = document.getElementById('food-mart-extras');
-    var carOpts = document.getElementById('car-options');
-    if (extras) extras.style.display = (serviceName === 'FOOD_MART' || serviceName === 'FOOD' || serviceName === 'MART') ? 'block' : 'none';
-    if (carOpts) carOpts.style.display = (serviceName === 'CAR') ? 'block' : 'none';
-
-    if (window.APP.places.origin && window.APP.places.dest) {
-        if (window.APP_MAP && window.APP_MAP.drawRoute) window.APP_MAP.drawRoute();
-    }
-    window.updateLink();
-};
-
-window.updateLink = function () { };
-
-window.submitOrder = function () {
-    // 1. Validation
-    if (!window.APP.state.pickup.lat || !window.APP.state.dropoff.lat) {
-        alert('Mohon lengkapi lokasi jemput dan tujuan dulu ya!');
-        return;
-    }
-    if (!window.APP.calc.price || window.APP.calc.price === 0) {
-        alert('Mohon tunggu estimasi harga muncul.');
-        return;
-    }
-
-    // 2. Prepare Payload
-    var paymentSelect = document.getElementById('payment-method');
-    var paymentMethod = paymentSelect ? paymentSelect.value : 'CASH';
-
-    var payload = {
-        service: window.APP.service,
-        customer_phone: localStorage.getItem('bj_phone') || '080000000000',
-        session_key: localStorage.getItem('bj_token'),
-        pickupLocation: window.APP.state.pickup,
-        dropoffLocation: window.APP.state.dropoff,
-        origin: window.APP.state.pickup.address,
-        destination: window.APP.state.dropoff.address,
-        note: document.getElementById('note').value,
-        price: window.APP.calc.price,
-        paymentMethod: paymentMethod
-    };
-
-    if (window.APP.service === 'FOOD_MART') {
-        payload.items = document.getElementById('items').value;
-        payload.estPrice = document.getElementById('est-price').value;
-    }
-
-    // 3. Strict Branching
-    if (paymentMethod === 'QRIS') {
-        window.APP.sendOrderToBackend(payload, '/orders/qris');
-    } else {
-        window.APP.sendOrderToBackend(payload, '/orders/create');
-    }
-};
-
-// ─── QRIS MODAL CONTROL ─────────────────────────────────────────────────────
-window.showQrisModal = function (order) {
-    // DEFENSIVE: Double check amount
-    var amount = order.payment ? order.payment.expected_amount : 0;
-    if (amount <= 0) {
-        console.error('Invalid QRIS state: Amount is 0');
-        return;
-    }
-
-    var modal = document.getElementById('modal-qris');
-    var amountEl = document.getElementById('qris-amount');
-
-    if (modal && amountEl) {
-        amountEl.innerText = 'Rp ' + amount.toLocaleString('id-ID');
-        modal.classList.remove('hidden');
-
-        // Bind Confirm Button
-        var doneBtn = document.getElementById('btn-qris-done');
-        if (doneBtn) {
-            doneBtn.onclick = function () {
-                // User says they paid.
-                // We could call a verification endpoint, but for MVP just hide or refetch?
-                // User request implies: "User klik... Backend create... Backend return... -> Show QR"
-                // It doesn't say what happens AFTER "Sudah Bayar".
-                // I will strictly just hide the modal and maybe trigger a status check.
-                modal.classList.add('hidden');
-                alert('Terima kasih! Kami akan mengecek pembayaran Anda.');
-                window.APP.fetchActiveOrder(); // Refresh state
-            };
+    closeQrisModal: function () {
+        var modal = document.getElementById('modal-qris');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.style.display = 'none'; // Force hide
         }
     }
 };
 
-window.closeQrisModal = function () {
-    var modal = document.getElementById('modal-qris');
-    if (modal) modal.classList.add('hidden');
-};
+// ─── GLOBAL BINDINGS ────────────────────────────────────────────────────────
+window.setService = window.APP.setService; // Rebind if needed by HTML
+window.updateLink = function () { };
+window.submitOrder = function () { window.APP.submitOrder(); };
+window.closeQrisModal = function () { window.APP.closeQrisModal(); };
+window.openQrisModal = function (o) { window.APP.openQrisModal(o); };
+window.finishQrisPayment = function () { }; // Dummy safety
 
-// Global Safety
-window.finishQrisPayment = function () { /* No-op, handled by showQrisModal binding */ };
-
-// Init
 document.addEventListener('DOMContentLoaded', window.APP.initApp);

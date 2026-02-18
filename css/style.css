@@ -748,3 +748,7 @@ input:focus {
     cursor: not-allowed;
     box-shadow: none;
 }
+
+.hidden {
+    display: none !important;
+}
