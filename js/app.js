@@ -333,15 +333,49 @@ window.APP = {
             return;
         }
 
-        // 2. Lock UI
+        // 2. Open Confirmation Modal instead of direct create
+        window.APP.openConfirmModal();
+    },
+
+    openConfirmModal: function () {
+        var modal = document.getElementById('modal-confirm-order');
+        if (!modal) return;
+
+        // Populate Data
+        document.getElementById('confirm-origin').innerText = window.APP.state.pickup.address.split(',')[0];
+        document.getElementById('confirm-dest').innerText = window.APP.state.dropoff.address.split(',')[0];
+
+        var price = window.APP.calc.price || 0;
+        document.getElementById('confirm-price').innerText = 'Rp ' + price.toLocaleString('id-ID');
+
+        var paymentMethod = document.getElementById('payment-method-input').value;
+        document.getElementById('confirm-method').innerText = (paymentMethod === 'QRIS') ? 'QRIS (Scan)' : 'TUNAI (Cash)';
+
+        // Show Modal
+        modal.classList.remove('hidden');
+        modal.style.display = 'flex';
+    },
+
+    closeConfirmModal: function () {
+        var modal = document.getElementById('modal-confirm-order');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.style.display = 'none';
+        }
+    },
+
+    processOrder: async function () {
+        // Close modal first
+        window.APP.closeConfirmModal();
+
+        // Lock UI
         var btn = document.getElementById('btn-submit');
         var btnText = document.getElementById('btn-text');
         if (btn) btn.classList.add('disabled');
         if (btnText) btnText.innerText = '⏳ Memproses...';
 
         try {
-            var paymentSelect = document.getElementById('payment-method');
-            var method = paymentSelect ? paymentSelect.value : 'CASH';
+            var method = document.getElementById('payment-method-input').value || 'CASH';
             var response = null;
 
             if (method === 'QRIS') {
@@ -606,6 +640,15 @@ window.APP = {
 window.setService = function (service, tabEl) { window.APP.setService(service, tabEl); };
 window.updateLink = function () { window.APP.updateSubmitButton(); };
 window.submitOrder = function () { window.APP.submitOrder(); };
+window.openConfirmModal = function () { window.APP.openConfirmModal(); };
+window.closeConfirmModal = function () { window.APP.closeConfirmModal(); };
+window.processOrder = function () { window.APP.processOrder(); };
+window.selectPayment = function (method, el) {
+    document.getElementById('payment-method-input').value = method;
+    var cards = document.querySelectorAll('.payment-card');
+    cards.forEach(function (c) { c.classList.remove('selected'); });
+    el.classList.add('selected');
+};
 window.closeQrisModal = function () { window.APP.closeQrisModal(); };
 window.openQrisModal = function (o) { window.APP.openQrisModal(o); };
 window.cancelActiveOrder = function () { window.APP.cancelActiveOrder(); };

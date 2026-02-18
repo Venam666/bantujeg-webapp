@@ -152,12 +152,29 @@
                 </label>
             </div>
 
+            <!-- Payment Method Cards -->
             <div class="payment-group">
-                <label for="payment-method">💳 Metode Pembayaran</label>
-                <select id="payment-method">
-                    <option value="CASH">💵 Bayar Tunai (Cash)</option>
-                    <option value="QRIS">📱 QRIS</option>
-                </select>
+                <label>💳 Metode Pembayaran</label>
+                <div class="payment-grid" id="payment-grid">
+                    <div class="payment-card selected" onclick="selectPayment('CASH', this)">
+                        <span class="pay-icon">💵</span>
+                        <div class="pay-info">
+                            <div class="pay-name">Tunai</div>
+                            <div class="pay-desc">Bayar ke Driver</div>
+                        </div>
+                        <div class="check-icon">✓</div>
+                    </div>
+                    <div class="payment-card" onclick="selectPayment('QRIS', this)">
+                        <span class="pay-icon">📱</span>
+                        <div class="pay-info">
+                            <div class="pay-name">QRIS</div>
+                            <div class="pay-desc">Scan Code</div>
+                        </div>
+                        <div class="check-icon">✓</div>
+                    </div>
+                </div>
+                <!-- Hidden input to store value for app.js -->
+                <input type="hidden" id="payment-method-input" value="CASH">
             </div>
 
             <div class="error-card" id="error-card">
@@ -188,6 +205,45 @@
         </div>
 
     </div><!-- /#view-main -->
+
+    <!-- ========================
+         CONFIRMATION MODAL
+         ======================== -->
+    <div id="modal-confirm-order" class="hidden"
+        style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:9999;justify-content:center;align-items:end; animation:fadeIn 0.2s;">
+        <div class="confirm-sheet">
+            <div class="sheet-handle"></div>
+            <h3>Konfirmasi Order</h3>
+
+            <div class="confirm-summary">
+                <div class="summary-row">
+                    <div class="s-icon">📍</div>
+                    <div class="s-text" id="confirm-origin">...</div>
+                </div>
+                <div class="summary-vline"></div>
+                <div class="summary-row">
+                    <div class="s-icon">🏁</div>
+                    <div class="s-text" id="confirm-dest">...</div>
+                </div>
+            </div>
+
+            <div class="confirm-details">
+                <div class="detail-item">
+                    <div class="d-label">Total Harga</div>
+                    <div class="d-value price" id="confirm-price">Rp 0</div>
+                </div>
+                <div class="detail-item">
+                    <div class="d-label">Pembayaran</div>
+                    <div class="d-value" id="confirm-method">TUNAI</div>
+                </div>
+            </div>
+
+            <div class="confirm-actions">
+                <button class="btn-secondary" onclick="closeConfirmModal()">Revisi</button>
+                <button class="btn-primary" onclick="processOrder()">Lanjut Gas! 🚀</button>
+            </div>
+        </div>
+    </div>
 
     <!-- ========================
          ACTIVE ORDER STATUS CARD

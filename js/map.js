@@ -128,6 +128,7 @@ window.APP_MAP = {
     },
 
     // ─── ROUTING ─────────────────────────────────────────────────────────────
+    // ─── ROUTING ─────────────────────────────────────────────────────────────
     drawRoute: function () {
         if (!map || !ds || !dr) return;
         var origin = window.APP.places.origin;
@@ -146,7 +147,8 @@ window.APP_MAP = {
             origin: origin.geometry.location,
             destination: dest.geometry.location,
             travelMode: travelMode,
-            avoidTolls: !window.APP.carOptions.toll
+            avoidTolls: !window.APP.carOptions.toll,
+            provideRouteAlternatives: true // ✅ Request alternatives
         }, function (result, status) {
             window.APP_MAP.setLoading(false);
 
@@ -159,7 +161,19 @@ window.APP_MAP = {
                 return;
             }
 
+            // ✅ Find SHORTEST route among alternatives
+            if (result.routes.length > 1) {
+                result.routes.sort(function (a, b) {
+                    return a.legs[0].distance.value - b.legs[0].distance.value;
+                });
+            }
+
+            // Explicitly use the shortest one (index 0 after sort)
+            // We create a new result object or just let the modified result pass through
+            // DirectionsRenderer renders routes[routeIndex], default 0.
             dr.setDirections(result);
+            dr.setRouteIndex(0);
+
             if (result.routes[0] && result.routes[0].bounds) {
                 map.fitBounds(result.routes[0].bounds, { padding: 60 });
             }
