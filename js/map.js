@@ -163,43 +163,43 @@ window.APP_MAP = {
     },
 
     calculatePrice: function (distance) {
+        // DISPLAY ESTIMATE ONLY — price authority is backend (POST /pricing/preview)
+        // This function NEVER sets APP.calc.price. Submit button stays disabled.
         var service = window.APP.service;
-        var config = window.APP.config && window.APP.config[service]
-            ? window.APP.config[service]
-            : FALLBACK_CONFIG[service];
+        var config = FALLBACK_CONFIG[service];
 
         if (!config) {
-            console.error('[PRICING] No config available for ' + service);
+            console.warn('[PRICING] No fallback config for ' + service);
             return;
         }
 
-        var price = 0;
-
-        // Unified Calculation Logic for supplied structure
+        var estimate = 0;
         if (config.base_price !== undefined) {
             if (distance <= config.base_distance_km) {
-                price = config.base_price;
+                estimate = config.base_price;
             } else {
-                price = config.base_price + ((distance - config.base_distance_km) * config.price_per_km);
+                estimate = config.base_price + ((distance - config.base_distance_km) * config.price_per_km);
             }
         }
 
-        // Car Seat Surge
+        // Car Seat Surge (display only)
         if (service === 'CAR' && window.APP.carOptions.seats === 6) {
-            price *= 1.3;
+            estimate *= 1.3;
         }
 
-        // Rounding up to nearest 500
-        price = Math.ceil(price / 500) * 500;
-        window.APP.calc.price = price;
+        estimate = Math.ceil(estimate / 500) * 500;
+        var fakeEstimate = Math.ceil((estimate * 1.10) / 500) * 500;
 
-        var fakePrice = Math.ceil((price * 1.10) / 500) * 500;
-        document.getElementById('fake-price').innerText = 'Rp ' + fakePrice.toLocaleString('id-ID');
-        document.getElementById('price-display').innerText = 'Rp ' + price.toLocaleString('id-ID');
-        document.getElementById('dist-display').innerText = distance.toFixed(1) + ' km';
-        document.getElementById('price-card').style.display = 'flex';
-        if (window.APP && window.APP.updateSubmitButton) window.APP.updateSubmitButton();
-        window.updateLink();
+        // Show as estimate — APP.calc.price stays 0 (submit stays disabled)
+        var priceDisplay = document.getElementById('price-display');
+        var fakeDisplay = document.getElementById('fake-price');
+        var distDisplay = document.getElementById('dist-display');
+        var priceCard = document.getElementById('price-card');
+        if (priceDisplay) priceDisplay.innerText = '~Rp ' + estimate.toLocaleString('id-ID') + ' (estimasi)';
+        if (fakeDisplay) fakeDisplay.innerText = 'Rp ' + fakeEstimate.toLocaleString('id-ID');
+        if (distDisplay) distDisplay.innerText = distance.toFixed(1) + ' km';
+        if (priceCard) priceCard.style.display = 'flex';
+        // Do NOT call updateSubmitButton — price is not confirmed by backend
     },
 
     // ─── ROUTING ─────────────────────────────────────────────────────────────
@@ -280,7 +280,7 @@ window.APP_MAP = {
             window.APP.calc = { distance: parseFloat(finalKm.toFixed(2)), duration: durationMins };
             document.getElementById('dist-display').innerText = window.APP.calc.distance.toFixed(1) + ' km (' + durationMins + ' mnt)';
 
-            // Try backend pricing preview first (authoritative price)
+            // Backend pricing preview is the ONLY authority for APP.calc.price
             var pickup = window.APP.state.pickup;
             var dropoff = window.APP.state.dropoff;
 
@@ -291,13 +291,18 @@ window.APP_MAP = {
                     finalKm
                 ).then(function (backendPrice) {
                     if (!backendPrice) {
-                        // Backend failed — fall back to local calculation
+                        // Backend failed — show display-only estimate, submit stays DISABLED
+                        console.warn('[PRICING] Backend preview failed. Showing estimate only. Submit disabled.');
+                        window.APP.calc.price = 0;
                         window.APP_MAP.calculatePrice(finalKm);
+                        window.APP.updateSubmitButton();
                     }
                     document.getElementById('price-card').style.display = 'flex';
                     window.updateLink();
                 });
             } else {
+                // No coords yet — show estimate only, submit stays disabled
+                window.APP.calc.price = 0;
                 window.APP_MAP.calculatePrice(finalKm);
                 document.getElementById('price-card').style.display = 'flex';
                 window.updateLink();
@@ -608,9 +613,7 @@ function initMap() {
     if (!document.getElementById('map')) return;
 
     try {
-        // FETCH PRICING (from new endpoint)
-        window.APP_MAP.fetchPricingConfig();
-
+        // Pricing config fetch removed — price authority is POST /pricing/preview only
         var mapSettings = window.APP_MAP.getServiceMapSettings('RIDE');
 
         map = new google.maps.Map(document.getElementById('map'), {

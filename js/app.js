@@ -282,8 +282,7 @@ window.APP = {
     _buildPayload: function () {
         return {
             service: window.APP.service,
-            customer_phone: localStorage.getItem('bj_phone') || '080000000000',
-            session_key: localStorage.getItem('bj_token'),
+            customer_phone: localStorage.getItem('bj_phone') || '',
             pickupLocation: {
                 lat: window.APP.state.pickup.lat,
                 lng: window.APP.state.pickup.lng
@@ -348,16 +347,7 @@ window.APP = {
             amountEl.innerText = 'Rp ' + (order.payment.expected_amount).toLocaleString('id-ID');
             modal.classList.remove('hidden');
             modal.style.display = 'flex';
-
-            // Bind Done Button
-            var doneBtn = document.getElementById('btn-qris-done');
-            if (doneBtn) {
-                doneBtn.onclick = function () {
-                    window.closeQrisModal();
-                    window.APP.fetchActiveOrder();
-                    alert('Terima kasih. Kami sedang mengecek pembayaran Anda.');
-                };
-            }
+            // Done button handled by global finishQrisPayment binding
         }
     },
 
@@ -376,6 +366,10 @@ window.updateLink = function () { window.APP.updateSubmitButton(); };
 window.submitOrder = function () { window.APP.submitOrder(); };
 window.closeQrisModal = function () { window.APP.closeQrisModal(); };
 window.openQrisModal = function (o) { window.APP.openQrisModal(o); };
-window.finishQrisPayment = function () { }; // Dummy safety
+window.finishQrisPayment = function () {
+    window.closeQrisModal();
+    window.APP.fetchActiveOrder();
+    alert('Terima kasih. Kami sedang mengecek pembayaran Anda.');
+};
 
 document.addEventListener('DOMContentLoaded', window.APP.initApp);
