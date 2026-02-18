@@ -45,6 +45,9 @@ window.APP = {
     carOptions: { seats: 4, toll: false },
     activeOrder: null,
     _qrisCountdownTimer: null,
+    _isFetchingOrder: false,   // P5: concurrent call guard
+    _pollingTimer: null,       // P4: polling timer
+    _pollingInterval: 5000,    // P4: 5 seconds
 
     // ─── STARTUP ─────────────────────────────────────────────────────────────
     initApp: function () {
@@ -78,38 +81,54 @@ window.APP = {
             jastipField.style.display = (service === 'FOOD_MART') ? 'block' : 'none';
         }
 
-        // Show/hide car options
+        // Show/hide car options (P9: also show for CAR_XL)
         var carOptions = document.getElementById('car-options');
         if (carOptions) {
-            carOptions.style.display = (service === 'CAR') ? 'block' : 'none';
+            carOptions.style.display = (service === 'CAR' || service === 'CAR_XL') ? 'block' : 'none';
         }
 
-        // Fetch pricing config for this service (for UI hints only)
+        // P9: Default seat selection per service
+        if (service === 'CAR_XL') {
+            var sixSeatRadio = document.querySelector('input[name="car-seat"][value="6"]');
+            if (sixSeatRadio) { sixSeatRadio.checked = true; window.APP.carOptions.seats = 6; }
+        } else if (service === 'CAR') {
+            var fourSeatRadio = document.querySelector('input[name="car-seat"][value="4"]');
+            if (fourSeatRadio) { fourSeatRadio.checked = true; window.APP.carOptions.seats = 4; }
+        }
+
+        // P7: Reset pricing state immediately — stale price from previous service must not show
+        window.APP.calc = { distance: 0, price: 0, duration: 0, withinLimit: true };
+        var _priceCard = document.getElementById('price-card');
+        var _errorCard = document.getElementById('error-card');
+        var _distDisplay = document.getElementById('dist-display');
+        if (_priceCard) _priceCard.style.display = 'none';
+        if (_errorCard) _errorCard.style.display = 'none';
+        if (_distDisplay) _distDisplay.innerText = '0 km';
+        window.APP.updateSubmitButton();
+
+        // fetchPricingConfig must complete before drawRoute uses the config.
         window.APP.fetchPricingConfig(service);
 
         // Recalculate price if route is already set
         if (window.APP.places && window.APP.places.origin && window.APP.places.dest) {
             if (window.APP_MAP && window.APP_MAP.drawRoute) {
-                window.APP_MAP.drawRoute();
+                window.debouncedDrawRoute();
             }
         }
     },
 
     // ─── BACKEND SYNC ────────────────────────────────────────────────────────
     fetchActiveOrder: async function () {
+        // P5: Concurrent call guard — prevent multiple simultaneous fetches
+        if (window.APP._isFetchingOrder) return;
+        window.APP._isFetchingOrder = true;
         try {
-            var token = localStorage.getItem('bj_token');
-            if (!token) return;
-
-            var apiUrl = (window.API_URL || 'http://localhost:3000');
-            var res = await fetch(apiUrl + '/orders/active', {
-                headers: { 'Authorization': 'Bearer ' + token }
+            var res = await fetch((window.API_URL || 'http://localhost:3000') + '/orders/active', {
+                credentials: 'include'
             });
 
             if (res.status === 401 || res.status === 403) {
-                localStorage.removeItem('bj_token');
-                localStorage.removeItem('bj_phone');
-                if (window.APP_AUTH && window.APP_AUTH.showLogin) window.APP_AUTH.showLogin();
+                window.APP_AUTH.logout();
                 return;
             }
 
@@ -128,6 +147,8 @@ window.APP = {
         } catch (e) {
             console.error('Fetch active order failed', e);
             // Network error: do NOT unlock — preserve current state
+        } finally {
+            window.APP._isFetchingOrder = false; // P5: always reset guard
         }
     },
 
@@ -135,9 +156,14 @@ window.APP = {
     // Fetches GET /pricing/config once per service switch. Cached in memory.
     // NEVER used for final price math — only for UI labels, distance limits.
     _pricingConfigCache: {},
+    _pricingConfigCacheTime: {}, // P6: TTL timestamps
     fetchPricingConfig: async function (service) {
         if (!service) service = window.APP.service;
-        if (window.APP._pricingConfigCache[service]) return; // already cached
+        // P6: 5-minute TTL cache check
+        var _CACHE_TTL = 5 * 60 * 1000;
+        var _cachedAt = window.APP._pricingConfigCacheTime[service] || 0;
+        var _isFresh = window.APP._pricingConfigCache[service] && (Date.now() - _cachedAt) < _CACHE_TTL;
+        if (_isFresh) return;
 
         try {
             var apiUrl = (window.API_URL || 'http://localhost:3000');
@@ -151,6 +177,7 @@ window.APP = {
                 // Cache all services at once
                 Object.keys(configs).forEach(function (svc) {
                     window.APP._pricingConfigCache[svc] = configs[svc];
+                    window.APP._pricingConfigCacheTime[svc] = Date.now(); // P6: record cache time
                 });
                 console.log('[PRICING CONFIG] Loaded from backend:', Object.keys(configs));
             }
@@ -175,6 +202,7 @@ window.APP = {
         if (status === 'WAITING_PAYMENT') {
             window.APP.uiState = 'WAITING_PAYMENT';
             window.APP.lockFormForActiveOrder();
+            window.APP.startPolling(); // P4
             // Guard: only show QRIS if amount is confirmed
             if (order.payment && order.payment.expected_amount > 0) {
                 window.openQrisModal(order);
@@ -185,6 +213,7 @@ window.APP = {
         if (['SEARCHING', 'ACCEPTED', 'PICKING_UP', 'ARRIVED', 'ON_RIDE', 'BUYING', 'DELIVERING'].includes(status)) {
             window.APP.uiState = 'ACTIVE';
             window.APP.showStatusCard(order);
+            window.APP.startPolling(); // P4
             return;
         }
 
@@ -192,10 +221,28 @@ window.APP = {
             // Order is done — clear active state, unlock form
             window.APP.activeOrder = null;
             window.APP.uiState = 'IDLE';
+            window.APP.stopPolling(); // P4
             window.APP.hideStatusCard();
             window.APP.unlockForm();
             window.APP.updateSubmitButton();
             return;
+        }
+    },
+
+    // ─── P4: ORDER STATUS POLLING ─────────────────────────────────────────────
+    startPolling: function () {
+        window.APP.stopPolling(); // clear any existing
+        window.APP._pollingTimer = setInterval(async function () {
+            if (!window.APP.activeOrder) { window.APP.stopPolling(); return; }
+            if (document.hidden) return; // pause when tab not visible — save battery & requests
+            await window.APP.fetchActiveOrder();
+        }, window.APP._pollingInterval);
+    },
+
+    stopPolling: function () {
+        if (window.APP._pollingTimer) {
+            clearInterval(window.APP._pollingTimer);
+            window.APP._pollingTimer = null;
         }
     },
 
@@ -280,15 +327,13 @@ window.APP = {
         if (cancelBtn) { cancelBtn.disabled = true; cancelBtn.innerText = '⏳ Membatalkan...'; }
 
         try {
-            var token = localStorage.getItem('bj_token');
             var apiUrl = (window.API_URL || 'http://localhost:3000');
             var res = await fetch(apiUrl + '/orders/cancel', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify({
                     orderId: orderId,
-                    customer_id: window.APP._getCustomerId(),
-                    customer_phone: localStorage.getItem('bj_phone') || '',
                     reason: 'Customer cancel'
                 })
             });
@@ -305,16 +350,6 @@ window.APP = {
             await window.APP.fetchActiveOrder();
             if (cancelBtn) { cancelBtn.disabled = false; cancelBtn.innerText = 'Batalkan Order'; }
         }
-    },
-
-    _getCustomerId: function () {
-        // Try to extract customer_id from JWT payload (base64 decode middle segment)
-        try {
-            var token = localStorage.getItem('bj_token');
-            if (!token) return null;
-            var payload = JSON.parse(atob(token.split('.')[1]));
-            return payload.id || payload.sub || payload.customer_id || null;
-        } catch (e) { return null; }
     },
 
     // ─── SECTION 6: SUBMIT FLOW ──────────────────────────────────────────────
@@ -390,6 +425,8 @@ window.APP = {
 
             // 3. Always fetch authoritative state from backend — no local guessing
             await window.APP.fetchActiveOrder();
+            // P4: Start polling after order is created
+            if (window.APP.activeOrder) window.APP.startPolling();
 
         } catch (e) {
             console.error('[ORDER] Submit failed:', e);
@@ -549,13 +586,10 @@ window.APP = {
 
     _post: async function (endpoint, payload) {
         var apiUrl = (window.API_URL || 'http://localhost:3000');
-        var token = localStorage.getItem('bj_token');
         var res = await fetch(apiUrl + endpoint, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + token
-            },
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify(payload)
         });
 
@@ -666,5 +700,12 @@ window.finishQrisPayment = async function () {
         window.APP.closeQrisModal();
     }
 };
+
+// P4: Page Visibility — immediately sync when tab becomes visible again
+document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && window.APP.activeOrder) {
+        window.APP.fetchActiveOrder();
+    }
+});
 
 document.addEventListener('DOMContentLoaded', window.APP.initApp);

@@ -15,6 +15,13 @@
 
 <body>
 
+    <!-- P1: Auth loading spinner — shown while /auth/me is in-flight -->
+    <div id="auth-loading"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:#fff; z-index:99999; justify-content:center; align-items:center; flex-direction:column; font-family:'Plus Jakarta Sans',sans-serif;">
+        <div style="font-size:2rem; margin-bottom:12px;">BantuJeg.</div>
+        <div style="font-size:0.9rem; color:#888;">Memuat sesi...</div>
+    </div>
+
     <!-- ========================
          VIEW: LOGIN
          ======================== -->
@@ -63,6 +70,7 @@
                 <div class="tab" data-service="FOOD_MART" onclick="setService('FOOD_MART', this)">🍜 FOOD &amp; MART
                 </div>
                 <div class="tab" data-service="CAR" onclick="setService('CAR', this)">🚗 MOBIL</div>
+                <div class="tab" data-service="CAR_XL" onclick="setService('CAR_XL', this)">🚐 MOBIL XL</div>
             </div>
 
             <div class="input-group">
@@ -178,7 +186,7 @@
             </div>
 
             <div class="error-card" id="error-card">
-                ✋ Kejauhan Boss! Max 30km ya.
+                ✋ Jarak melebihi batas layanan.
             </div>
 
             <div class="price-card" id="price-card">

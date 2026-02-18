@@ -38,28 +38,18 @@ window.APP_AUTH = {
 
     // --- Clear identity (only on explicit logout or 401) ---
     clearIdentity: function () {
-        localStorage.removeItem('bj_token');
+        // Token is now an HttpOnly cookie — only backend can clear it
+        // bj_phone is not sensitive auth data, keep it for display purposes
         localStorage.removeItem('bj_phone');
     },
 
     // --- Silent session validation via GET /auth/me ---
-    // Called after showing main (optimistic). Only reacts to 401.
+    // Called on page load. Shows main only on success.
     validateSession: async function () {
-        var token = localStorage.getItem('bj_token');
-        if (!token) return;
-
         try {
             var res = await fetch(window.API_URL + '/auth/me', {
-                headers: { 'Authorization': 'Bearer ' + token }
+                credentials: 'include'  // P1: cookie-based auth, no Authorization header
             });
-
-            if (res.status === 401) {
-                // Session expired or invalid — only case where we clear identity
-                console.warn('[AUTH] Session invalid (401). Clearing identity.');
-                window.APP_AUTH.clearIdentity();
-                window.APP_AUTH.showLogin();
-                return;
-            }
 
             if (res.ok) {
                 var data = await res.json();
@@ -68,12 +58,20 @@ window.APP_AUTH = {
                     localStorage.setItem('bj_phone', data.phone);
                 }
                 console.log('[AUTH] Session valid. Identity confirmed:', data.phone);
+                window.APP_AUTH.showMain();
+                return true;
             }
-            // Any other error (500, network) — do nothing. Stay logged in.
-            // Backend is down ≠ user is logged out.
+
+            // 401 or any non-ok: session invalid
+            console.warn('[AUTH] Session invalid (' + res.status + '). Showing login.');
+            window.APP_AUTH.clearIdentity();
+            window.APP_AUTH.showLogin();
+            return false;
         } catch (e) {
-            // Network error — do NOT clear token. Stay logged in.
-            console.warn('[AUTH] /auth/me unreachable. Staying logged in.', e.message);
+            // Network error — do NOT clear session. Show login as safe fallback.
+            console.warn('[AUTH] /auth/me unreachable. Showing login.', e.message);
+            window.APP_AUTH.showLogin();
+            return false;
         }
     },
 
@@ -88,6 +86,7 @@ window.APP_AUTH = {
             fetch(window.API_URL + '/auth/verify', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include', // P1: backend sets HttpOnly cookie in response
                 body: JSON.stringify({ token: token })
             })
                 .then(function (res) {
@@ -101,17 +100,13 @@ window.APP_AUTH = {
                 })
                 .then(function (data) {
                     if (data && data.success) {
-                        // sessionToken is the Firestore session key
-                        var sessionToken = data.sessionToken || data.session_key || token;
                         var phone = (data.customer && data.customer.phone) || data.phone || '';
-
-                        localStorage.setItem('bj_token', sessionToken);
                         if (phone) localStorage.setItem('bj_phone', phone);
 
                         // Clean URL — remove ?token= from address bar
                         history.replaceState({}, document.title, window.location.pathname);
 
-                        console.log('[AUTH] Magic link verified. Identity locked.');
+                        console.log('[AUTH] Magic link verified. Cookie set by backend.');
                         window.APP_AUTH.showMain();
                     } else {
                         console.warn('[AUTH] Verification logic failed:', data);
@@ -129,19 +124,20 @@ window.APP_AUTH = {
             return; // Wait for async verify
         }
 
-        // CASE 2: Token in localStorage — show main immediately, validate silently
-        var savedToken = localStorage.getItem('bj_token');
-        if (savedToken) {
-            console.log('[AUTH] Existing session found. Showing app immediately.');
-            window.APP_AUTH.showMain();
-            // Silent background validation — only clears on 401
-            window.APP_AUTH.validateSession();
-            return;
-        }
+        // CASE 2: No magic link — check session via /auth/me (cookie-based)
+        // Show loading spinner while checking, not the login form
+        var loginView = document.getElementById('view-login');
+        var mainView = document.getElementById('view-main');
+        if (loginView) loginView.style.display = 'none';
+        if (mainView) mainView.style.display = 'none';
 
-        // CASE 3: No token at all — show login
-        console.log('[AUTH] No session. Showing login.');
-        window.APP_AUTH.showLogin();
+        // Show a minimal loading indicator
+        var loadingEl = document.getElementById('auth-loading');
+        if (loadingEl) loadingEl.style.display = 'flex';
+
+        window.APP_AUTH.validateSession().finally(function () {
+            if (loadingEl) loadingEl.style.display = 'none';
+        });
     },
 
     // --- Request login (send magic link) ---
@@ -199,6 +195,9 @@ window.APP_AUTH = {
 
     // --- Logout: only explicit user action ---
     logout: function () {
+        // P1: Call backend to clear the HttpOnly cookie server-side
+        fetch(window.API_URL + '/auth/logout', { method: 'POST', credentials: 'include' })
+            .catch(function (e) { console.warn('[AUTH] Logout endpoint error:', e.message); });
         window.APP_AUTH.clearIdentity();
         window.APP_AUTH.showLogin();
     }

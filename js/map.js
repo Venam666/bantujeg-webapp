@@ -9,14 +9,9 @@ var JAVA_BOUNDS = {
     north: -5.0, east: 115.5
 };
 
-// Max distance per service type (km) — enforced AFTER route calculation
-var MAX_DISTANCE_KM = {
-    RIDE: 30,
-    SEND: 30,
-    FOOD_MART: 30,
-    CAR: 150,
-    CAR_XL: 150
-};
+// P3: Debounce state for drawRoute — prevents multiple concurrent DirectionsService calls
+var _drawRouteTimer = null;
+var _drawRouteDelay = 600; // ms
 
 // ─── 1. TOP-LEVEL DECLARATIONS ONLY ─────────────────────────────────────────
 var map = null;
@@ -97,7 +92,7 @@ window.APP_MAP = {
         var field = type === 'origin' ? 'pickup' : 'dropoff';
         window.APP_MAP.updateLocationState(field, place.geometry.location.lat(), place.geometry.location.lng(), 'autocomplete', cleaned);
         window.APP_MAP.updateMarker(type, place.geometry.location.lat(), place.geometry.location.lng());
-        window.APP_MAP.drawRoute();
+        window.debouncedDrawRoute(); // P3: debounced
     },
 
     updateMarker: function (type, lat, lng) {
@@ -189,15 +184,21 @@ window.APP_MAP = {
             };
             console.log('[DISTANCE DEBUG] Google Directions raw:', leg.distance.value, 'm →', distanceKm.toFixed(3), 'km');
 
-            // ─── SECTION 5: MAX DISTANCE ENFORCEMENT ─────────────────────────
-            var maxKm = MAX_DISTANCE_KM[serviceKey] || 30;
+            // ─── SECTION 5: MAX DISTANCE ENFORCEMENT (P2: use backend config) ──
+            var _pricingCfg = window.APP.getPricingConfig(serviceKey);
+            var maxKm = (_pricingCfg && _pricingCfg.constraints && _pricingCfg.constraints.max_distance_km)
+                ? _pricingCfg.constraints.max_distance_km
+                : 25; // conservative fallback (matches backend default)
+            var _maxDistMsg = (_pricingCfg && _pricingCfg.constraints && _pricingCfg.constraints.max_distance_error_msg)
+                ? _pricingCfg.constraints.max_distance_error_msg
+                : 'Jarak melebihi batas layanan (' + maxKm + 'km untuk ' + serviceKey + ')';
             if (distanceKm > maxKm) {
                 window.APP.calc.price = 0;
                 window.APP.calc.withinLimit = false;
                 window.APP.calc.distance = parseFloat(distanceKm.toFixed(2));
                 document.getElementById('price-card').style.display = 'none';
                 document.getElementById('dist-display').innerText = distanceKm.toFixed(1) + ' km';
-                window.APP_MAP.showError('Jarak melebihi batas layanan (' + maxKm + 'km untuk ' + serviceKey + ')');
+                window.APP_MAP.showError(_maxDistMsg);
                 if (window.showToast) window.showToast('Jarak melebihi batas layanan');
                 window.updateLink();
                 return;
@@ -265,7 +266,7 @@ window.APP_MAP = {
     },
 
     checkHistory: function () {
-        var stored = localStorage.getItem('bantujeg_history');
+        var stored = sessionStorage.getItem('bantujeg_history'); // P8: sessionStorage for privacy
         if (!stored) return;
         try {
             var data = JSON.parse(stored);
@@ -476,7 +477,7 @@ window.APP_MAP = {
                         window.APP_MAP.updateLocationState(field, lat, lng, 'gps', cleaned);
                         window.APP_MAP.updateMarker(type, lat, lng);
                         window.expandMap();
-                        if (window.APP.places.origin && window.APP.places.dest) window.APP_MAP.drawRoute();
+                        if (window.APP.places.origin && window.APP.places.dest) window.debouncedDrawRoute(); // P3
                     } else {
                         if (window.showToast) window.showToast('Gagal mendeteksi nama jalan.');
                         else alert('Gagal mendeteksi nama jalan.');
@@ -500,6 +501,15 @@ window.closeMapPicker = window.APP_MAP.closeMapPicker;
 window.confirmLocation = window.APP_MAP.confirmLocation;
 window.getCurrentLocation = window.APP_MAP.getCurrentLocation;
 window.getServiceMapSettings = window.APP_MAP.getServiceMapSettings;
+
+// P3: Debounced drawRoute — prevents rapid concurrent DirectionsService calls
+window.debouncedDrawRoute = function () {
+    if (_drawRouteTimer) clearTimeout(_drawRouteTimer);
+    _drawRouteTimer = setTimeout(function () {
+        _drawRouteTimer = null;
+        window.APP_MAP.drawRoute();
+    }, _drawRouteDelay);
+};
 
 window.expandMap = function () { document.getElementById('map-container').classList.add('expanded'); };
 window.setActiveField = function (field) { if (window.APP && window.APP.picker) window.APP.picker.activeField = field; };
@@ -537,7 +547,7 @@ window.handleCarOptionChange = function () {
     var selected = document.querySelector('input[name="car-seat"]:checked');
     window.APP.carOptions.seats = selected ? parseInt(selected.value, 10) : 4;
     window.APP.carOptions.toll = document.getElementById('car-toll').checked;
-    if (window.APP.places.origin && window.APP.places.dest) window.APP_MAP.drawRoute();
+    if (window.APP.places.origin && window.APP.places.dest) window.debouncedDrawRoute(); // P3
 };
 window.addEventListener('popstate', function (event) {
     var modal = document.getElementById('map-picker-modal');
