@@ -1,6 +1,29 @@
 /* ========================
    app.js - Strict Payment Flow
+   Backend is the ONLY pricing authority.
    ======================== */
+
+// ─── TOAST SYSTEM ────────────────────────────────────────────────────────────
+window.showToast = function (msg, duration) {
+    var existing = document.getElementById('bj-toast');
+    if (existing) existing.remove();
+
+    var toast = document.createElement('div');
+    toast.id = 'bj-toast';
+    toast.innerText = msg;
+    toast.style.cssText = [
+        'position:fixed', 'bottom:90px', 'left:50%', 'transform:translateX(-50%)',
+        'background:rgba(0,0,0,0.85)', 'color:#fff', 'padding:12px 20px',
+        'border-radius:24px', 'font-size:14px', 'font-weight:500',
+        'z-index:99999', 'pointer-events:none', 'white-space:nowrap',
+        'box-shadow:0 4px 16px rgba(0,0,0,0.3)', 'transition:opacity 0.3s'
+    ].join(';');
+    document.body.appendChild(toast);
+    setTimeout(function () {
+        toast.style.opacity = '0';
+        setTimeout(function () { if (toast.parentNode) toast.remove(); }, 300);
+    }, duration || 3000);
+};
 
 window.APP = {
     service: 'RIDE',
@@ -57,6 +80,9 @@ window.APP = {
             carOptions.style.display = (service === 'CAR') ? 'block' : 'none';
         }
 
+        // Fetch pricing config for this service (for UI hints only)
+        window.APP.fetchPricingConfig(service);
+
         // Recalculate price if route is already set
         if (window.APP.places && window.APP.places.origin && window.APP.places.dest) {
             if (window.APP_MAP && window.APP_MAP.drawRoute) {
@@ -90,6 +116,39 @@ window.APP = {
         } catch (e) {
             console.error('Fetch active order failed', e);
         }
+    },
+
+    // ─── PRICING CONFIG (UI HINTS ONLY) ──────────────────────────────────────
+    // Fetches GET /pricing/config once per service switch. Cached in memory.
+    // NEVER used for final price math — only for UI labels, distance limits.
+    _pricingConfigCache: {},
+    fetchPricingConfig: async function (service) {
+        if (!service) service = window.APP.service;
+        if (window.APP._pricingConfigCache[service]) return; // already cached
+
+        try {
+            var apiUrl = (window.API_URL || 'http://localhost:3000');
+            var res = await fetch(apiUrl + '/pricing/config');
+            if (!res.ok) throw new Error('Config fetch failed: ' + res.status);
+            var data = await res.json();
+
+            // Backend returns { success: true, data: { RIDE: {...}, SEND: {...}, ... } }
+            var configs = (data.success && data.data) ? data.data : data;
+            if (configs && typeof configs === 'object') {
+                // Cache all services at once
+                Object.keys(configs).forEach(function (svc) {
+                    window.APP._pricingConfigCache[svc] = configs[svc];
+                });
+                console.log('[PRICING CONFIG] Loaded from backend:', Object.keys(configs));
+            }
+        } catch (e) {
+            console.warn('[PRICING CONFIG] Failed to load, UI hints will use fallback.', e.message);
+        }
+    },
+
+    // Returns the backend config for a service (for UI hints only)
+    getPricingConfig: function (service) {
+        return window.APP._pricingConfigCache[service || window.APP.service] || null;
     },
 
     // ─── STATE RENDERER ───────────────────────────────────────────────────────
@@ -222,7 +281,14 @@ window.APP = {
 
     // ─── PRICING PREVIEW ─────────────────────────────────────────────────────
     // Called by map.js after route is calculated. Returns backend-authoritative price.
+    // This is the ONLY function allowed to set APP.calc.price.
     fetchPricePreview: async function (pickupLocation, dropoffLocation, distanceKm) {
+        // Show loading state
+        var priceDisplay = document.getElementById('price-display');
+        var priceCard = document.getElementById('price-card');
+        if (priceDisplay) priceDisplay.innerText = '⏳ Menghitung harga...';
+        if (priceCard) priceCard.style.display = 'flex';
+
         try {
             var apiUrl = (window.API_URL || 'http://localhost:3000');
             var res = await fetch(apiUrl + '/pricing/preview', {
@@ -239,27 +305,29 @@ window.APP = {
             var data = await res.json();
 
             if (data && data.success && data.price > 0) {
+                // ✅ ONLY place APP.calc.price is set
                 window.APP.calc.price = data.price;
                 window.APP.calc.distance = data.distanceKm || distanceKm || 0;
 
-                // Update UI
+                // Update UI with confirmed backend price
                 var fakePrice = Math.ceil((data.price * 1.10) / 500) * 500;
-                var priceDisplay = document.getElementById('price-display');
                 var fakeDisplay = document.getElementById('fake-price');
                 var distDisplay = document.getElementById('dist-display');
-                var priceCard = document.getElementById('price-card');
 
                 if (priceDisplay) priceDisplay.innerText = 'Rp ' + data.price.toLocaleString('id-ID');
                 if (fakeDisplay) fakeDisplay.innerText = 'Rp ' + fakePrice.toLocaleString('id-ID');
                 if (distDisplay) distDisplay.innerText = (data.distanceKm || distanceKm || 0).toFixed(1) + ' km';
                 if (priceCard) priceCard.style.display = 'flex';
 
-                // Update submit button
                 window.APP.updateSubmitButton();
                 return data.price;
             }
+
+            throw new Error('Backend returned no valid price');
         } catch (e) {
-            console.warn('[PRICING] Backend preview failed, using local fallback:', e.message);
+            console.warn('[PRICING] Backend preview failed:', e.message);
+            // Ensure price stays 0 — submit stays disabled
+            window.APP.calc.price = 0;
         }
         return null;
     },
@@ -366,10 +434,10 @@ window.updateLink = function () { window.APP.updateSubmitButton(); };
 window.submitOrder = function () { window.APP.submitOrder(); };
 window.closeQrisModal = function () { window.APP.closeQrisModal(); };
 window.openQrisModal = function (o) { window.APP.openQrisModal(o); };
-window.finishQrisPayment = function () {
+window.finishQrisPayment = async function () {
     window.closeQrisModal();
-    window.APP.fetchActiveOrder();
-    alert('Terima kasih. Kami sedang mengecek pembayaran Anda.');
+    window.showToast('⏳ Mengecek pembayaran...');
+    await window.APP.fetchActiveOrder();
 };
 
 document.addEventListener('DOMContentLoaded', window.APP.initApp);

@@ -163,31 +163,54 @@ window.APP_MAP = {
     },
 
     calculatePrice: function (distance) {
-        // DISPLAY ESTIMATE ONLY — price authority is backend (POST /pricing/preview)
+        // DISPLAY ONLY — backend remains pricing authority
         // This function NEVER sets APP.calc.price. Submit button stays disabled.
         var service = window.APP.service;
-        var config = FALLBACK_CONFIG[service];
 
-        if (!config) {
-            console.warn('[PRICING] No fallback config for ' + service);
-            return;
-        }
-
+        // Try backend config first (tiered), fall back to simple FALLBACK_CONFIG
+        var backendConfig = window.APP.getPricingConfig ? window.APP.getPricingConfig(service) : null;
         var estimate = 0;
-        if (config.base_price !== undefined) {
+
+        if (backendConfig && backendConfig.pricing_model && backendConfig.pricing_model.tiers) {
+            // Use tiered model from backend config
+            var tiers = backendConfig.pricing_model.tiers;
+            var tier = null;
+            for (var i = 0; i < tiers.length; i++) {
+                if (distance >= tiers[i].min_km && distance < tiers[i].max_km) {
+                    tier = tiers[i];
+                    break;
+                }
+            }
+            // Use last tier if beyond all ranges
+            if (!tier) tier = tiers[tiers.length - 1];
+
+            if (tier) {
+                if (tier.calculation_type === 'FLAT') {
+                    estimate = tier.base_price;
+                } else {
+                    estimate = tier.base_price + ((distance - tier.offset_km) * tier.price_per_km);
+                }
+            }
+
+            // Rounding policy
+            var policy = backendConfig.pricing_model.rounding_policy || 'NEAREST_500_UP';
+            var roundTo = policy === 'NEAREST_100_UP' ? 100 : 500;
+            estimate = Math.ceil(estimate / roundTo) * roundTo;
+        } else {
+            // Fallback to simple config
+            var config = FALLBACK_CONFIG[service];
+            if (!config) {
+                console.warn('[PRICING] No fallback config for ' + service);
+                return;
+            }
             if (distance <= config.base_distance_km) {
                 estimate = config.base_price;
             } else {
                 estimate = config.base_price + ((distance - config.base_distance_km) * config.price_per_km);
             }
+            estimate = Math.ceil(estimate / 500) * 500;
         }
 
-        // Car Seat Surge (display only)
-        if (service === 'CAR' && window.APP.carOptions.seats === 6) {
-            estimate *= 1.3;
-        }
-
-        estimate = Math.ceil(estimate / 500) * 500;
         var fakeEstimate = Math.ceil((estimate * 1.10) / 500) * 500;
 
         // Show as estimate — APP.calc.price stays 0 (submit stays disabled)
@@ -195,7 +218,7 @@ window.APP_MAP = {
         var fakeDisplay = document.getElementById('fake-price');
         var distDisplay = document.getElementById('dist-display');
         var priceCard = document.getElementById('price-card');
-        if (priceDisplay) priceDisplay.innerText = '~Rp ' + estimate.toLocaleString('id-ID') + ' (estimasi)';
+        if (priceDisplay) priceDisplay.innerText = '~Rp ' + estimate.toLocaleString('id-ID') + ' — Estimasi sementara';
         if (fakeDisplay) fakeDisplay.innerText = 'Rp ' + fakeEstimate.toLocaleString('id-ID');
         if (distDisplay) distDisplay.innerText = distance.toFixed(1) + ' km';
         if (priceCard) priceCard.style.display = 'flex';
@@ -508,7 +531,11 @@ window.APP_MAP = {
 
     getCurrentLocation: function (inputType) {
         if (window.APP.picker.locked) return;
-        if (!navigator.geolocation) { alert('Browser tidak support GPS'); return; }
+        if (!navigator.geolocation) {
+            if (window.showToast) window.showToast('Browser tidak support GPS');
+            else alert('Browser tidak support GPS');
+            return;
+        }
 
         var btnEl = document.getElementById('gps-' + inputType);
         if (!btnEl) return;
@@ -520,7 +547,8 @@ window.APP_MAP = {
 
         if (existing && existing.source === 'manual' && existing.lat) {
             btnEl.innerHTML = original;
-            alert('Lokasi sudah diatur manual. Hapus dulu untuk gunakan GPS.');
+            if (window.showToast) window.showToast('Lokasi sudah diatur manual. Hapus dulu untuk gunakan GPS.');
+            else alert('Lokasi sudah diatur manual. Hapus dulu untuk gunakan GPS.');
             return;
         }
 
@@ -542,14 +570,17 @@ window.APP_MAP = {
                         window.expandMap();
                         if (window.APP.places.origin && window.APP.places.dest) window.APP_MAP.drawRoute();
                     } else {
-                        alert('Gagal mendeteksi nama jalan.');
+                        if (window.showToast) window.showToast('Gagal mendeteksi nama jalan.');
+                        else alert('Gagal mendeteksi nama jalan.');
                     }
                 });
             },
             function () {
                 btnEl.innerHTML = original;
-                alert('Gagal ambil lokasi. Pastikan GPS nyala!');
-            }
+                if (window.showToast) window.showToast('Gagal ambil lokasi. Pastikan GPS nyala!');
+                else alert('Gagal ambil lokasi. Pastikan GPS nyala!');
+            },
+            { timeout: 10000, maximumAge: 30000 }
         );
     }
 };
