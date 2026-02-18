@@ -168,6 +168,13 @@ window.APP_MAP = {
             var distanceKm = leg.distance.value / 1000;
             var durationMins = Math.ceil(leg.duration.value / 60);
 
+            // ─── DISTANCE DEBUG (instrumentation only — no logic change) ──────
+            window.APP._distanceDebug = {
+                rawMeters: leg.distance.value,
+                frontendKm: distanceKm
+            };
+            console.log('[DISTANCE DEBUG] Google Directions raw:', leg.distance.value, 'm →', distanceKm.toFixed(3), 'km');
+
             // ─── SECTION 5: MAX DISTANCE ENFORCEMENT ─────────────────────────
             var maxKm = MAX_DISTANCE_KM[serviceKey] || 30;
             if (distanceKm > maxKm) {

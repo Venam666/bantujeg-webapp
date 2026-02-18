@@ -207,6 +207,10 @@
             style="margin-top:24px; background:#e8f5e9; border-radius:12px; padding:16px; max-width:300px; text-align:center;">
             <div style="font-size:0.8rem; color:#2e7d32; font-weight:600;">💬 Notifikasi dikirim ke WhatsApp kamu</div>
         </div>
+        <button id="order-cancel-btn" onclick="cancelActiveOrder()"
+            style="display:none; margin-top:24px; padding:12px 32px; background:#fff; color:#e53935; border:2px solid #e53935; border-radius:50px; font-size:0.95rem; font-weight:700; cursor:pointer; font-family:'Plus Jakarta Sans',sans-serif;">
+            Batalkan Order
+        </button>
     </div>
 
     <!-- Map Picker Modal (outside view-main so it always overlays) -->
@@ -233,8 +237,6 @@
         style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:9999;justify-content:center;align-items:center;">
         <div
             style="background:white;width:90%;max-width:400px;border-radius:16px;padding:24px;text-align:center;position:relative;animation:slideUp 0.3s ease-out;">
-            <button onclick="closeQrisModal()"
-                style="position:absolute;top:16px;right:16px;background:none;border:none;font-size:24px;cursor:pointer;">&times;</button>
             <h3 style="margin:0 0 16px 0;font-family:'Inter',sans-serif;font-weight:700;">Scan QRIS BantuJeg</h3>
             <img src="./assets/qris/dummy.png"
                 style="width:200px;height:200px;margin:0 auto 16px;display:block;border:2px solid #f0f0f0;border-radius:12px;"
@@ -243,10 +245,12 @@
             <h2 id="qris-amount" style="margin:0 0 16px 0;color:#00AA13;font-size:24px;font-weight:800;">Rp 0</h2>
             <div
                 style="background:#fff4e5;color:#d97706;padding:8px;border-radius:8px;font-size:12px;margin-bottom:24px;">
-                ⏳ Selesaikan pembayaran dalam 10 menit
+                ⏳ Selesaikan dalam: <span id="qris-countdown"
+                    style="font-weight:700;font-variant-numeric:tabular-nums;">15:00</span>
             </div>
             <button id="btn-qris-done"
-                style="width:100%;padding:14px;background:#00AA13;color:white;border:none;border-radius:50px;font-weight:700;font-size:16px;cursor:pointer;box-shadow:0 4px 6px -1px rgba(0, 170, 19, 0.3);">
+                style="width:100%;padding:14px;background:#00AA13;color:white;border:none;border-radius:50px;font-weight:700;font-size:16px;cursor:pointer;box-shadow:0 4px 6px -1px rgba(0, 170, 19, 0.3);"
+                onclick="finishQrisPayment()">
                 SAYA SUDAH BAYAR
             </button>
         </div>

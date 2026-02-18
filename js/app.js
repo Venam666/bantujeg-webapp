@@ -27,6 +27,7 @@ window.showToast = function (msg, duration) {
 
 window.APP = {
     service: 'RIDE',
+    uiState: 'IDLE', // IDLE | ROUTE_READY | PRICING_LOADING | PRICED | SUBMITTING | WAITING_PAYMENT | ACTIVE
     state: {
         pickup: { lat: null, lng: null, source: null, address: '' },
         dropoff: { lat: null, lng: null, source: null, address: '' }
@@ -43,6 +44,7 @@ window.APP = {
     },
     carOptions: { seats: 4, toll: false },
     activeOrder: null,
+    _qrisCountdownTimer: null,
 
     // ─── STARTUP ─────────────────────────────────────────────────────────────
     initApp: function () {
@@ -51,12 +53,14 @@ window.APP = {
 
         // Mobile Menu Placeholder
         var menuBtn = document.getElementById('menu-btn');
-        if (menuBtn) menuBtn.addEventListener('click', function () { alert('Fitur ini belum tersedia.'); });
+        if (menuBtn) menuBtn.addEventListener('click', function () {
+            if (window.showToast) window.showToast('Fitur ini belum tersedia.');
+        });
 
         // Set Default Service
         window.setService('RIDE', document.querySelector('.tab[data-service="RIDE"]') || document.querySelector('.tab'));
 
-        // STRICT: Fetch Active Order on every load
+        // STRICT: Fetch Active Order on every load — recovers UI into ACTIVE state if needed
         window.APP.fetchActiveOrder();
     },
 
@@ -114,9 +118,16 @@ window.APP = {
                 var order = data.activeOrder;
                 window.APP.activeOrder = order;
                 window.APP.renderOrderState(order);
+            } else {
+                // ✅ Explicit null path: no active order → unlock form
+                window.APP.activeOrder = null;
+                window.APP.hideStatusCard();
+                window.APP.unlockForm();
+                window.APP.updateSubmitButton();
             }
         } catch (e) {
             console.error('Fetch active order failed', e);
+            // Network error: do NOT unlock — preserve current state
         }
     },
 
@@ -162,6 +173,8 @@ window.APP = {
         var status = order.status;
 
         if (status === 'WAITING_PAYMENT') {
+            window.APP.uiState = 'WAITING_PAYMENT';
+            window.APP.lockFormForActiveOrder();
             // Guard: only show QRIS if amount is confirmed
             if (order.payment && order.payment.expected_amount > 0) {
                 window.openQrisModal(order);
@@ -170,16 +183,33 @@ window.APP = {
         }
 
         if (['SEARCHING', 'ACCEPTED', 'PICKING_UP', 'ARRIVED', 'ON_RIDE', 'BUYING', 'DELIVERING'].includes(status)) {
+            window.APP.uiState = 'ACTIVE';
             window.APP.showStatusCard(order);
             return;
         }
 
         if (['COMPLETED', 'CANCELLED', 'EXPIRED'].includes(status)) {
-            // Order is done — clear active state, show form
+            // Order is done — clear active state, unlock form
             window.APP.activeOrder = null;
+            window.APP.uiState = 'IDLE';
             window.APP.hideStatusCard();
+            window.APP.unlockForm();
+            window.APP.updateSubmitButton();
             return;
         }
+    },
+
+    // ─── FORM LOCK / UNLOCK ──────────────────────────────────────────────────
+    // Disables all form inputs while an active order exists.
+    lockFormForActiveOrder: function () {
+        var inputs = document.querySelectorAll('#view-main input, #view-main select, #view-main textarea');
+        inputs.forEach(function (el) { el.disabled = true; });
+        window.APP.updateSubmitButton();
+    },
+
+    unlockForm: function () {
+        var inputs = document.querySelectorAll('#view-main input, #view-main select, #view-main textarea');
+        inputs.forEach(function (el) { el.disabled = false; });
     },
 
     // ─── STATUS CARD ─────────────────────────────────────────────────────────
@@ -187,6 +217,7 @@ window.APP = {
         var card = document.getElementById('active-order-card');
         var statusText = document.getElementById('order-status-text');
         var orderIdText = document.getElementById('order-id-text');
+        var cancelBtn = document.getElementById('order-cancel-btn');
 
         if (!card) return;
 
@@ -208,6 +239,15 @@ window.APP = {
             orderIdText.innerText = id ? ('ID Order: ' + id.substring(0, 8).toUpperCase()) : '';
         }
 
+        // Show cancel button only for cancellable statuses
+        var cancellableStatuses = ['SEARCHING', 'ACCEPTED', 'PICKING_UP', 'ARRIVED'];
+        if (cancelBtn) {
+            cancelBtn.style.display = cancellableStatuses.includes(order.status) ? 'block' : 'none';
+        }
+
+        // Lock form inputs while order is active
+        window.APP.lockFormForActiveOrder();
+
         // Hide the form, show the status card
         var cardInterface = document.querySelector('.card-interface');
         if (cardInterface) cardInterface.style.display = 'none';
@@ -227,6 +267,54 @@ window.APP = {
 
         var bottomBar = document.querySelector('.bottom-bar');
         if (bottomBar) bottomBar.style.display = '';
+    },
+
+    // ─── CUSTOMER CANCEL ─────────────────────────────────────────────────────
+    cancelActiveOrder: async function () {
+        var order = window.APP.activeOrder;
+        if (!order) return;
+        var orderId = order.orderId || order.order_id || order.id;
+        if (!orderId) { if (window.showToast) window.showToast('ID order tidak ditemukan'); return; }
+
+        var cancelBtn = document.getElementById('order-cancel-btn');
+        if (cancelBtn) { cancelBtn.disabled = true; cancelBtn.innerText = '⏳ Membatalkan...'; }
+
+        try {
+            var token = localStorage.getItem('bj_token');
+            var apiUrl = (window.API_URL || 'http://localhost:3000');
+            var res = await fetch(apiUrl + '/orders/cancel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({
+                    orderId: orderId,
+                    customer_id: window.APP._getCustomerId(),
+                    customer_phone: localStorage.getItem('bj_phone') || '',
+                    reason: 'Customer cancel'
+                })
+            });
+            var data = await res.json();
+            if (data && (data.success || data.idempotent)) {
+                if (window.showToast) window.showToast('Order dibatalkan.');
+            } else {
+                if (window.showToast) window.showToast(data.message || 'Gagal membatalkan order');
+            }
+        } catch (e) {
+            if (window.showToast) window.showToast('Gagal membatalkan: ' + e.message);
+        } finally {
+            // Always re-sync with backend
+            await window.APP.fetchActiveOrder();
+            if (cancelBtn) { cancelBtn.disabled = false; cancelBtn.innerText = 'Batalkan Order'; }
+        }
+    },
+
+    _getCustomerId: function () {
+        // Try to extract customer_id from JWT payload (base64 decode middle segment)
+        try {
+            var token = localStorage.getItem('bj_token');
+            if (!token) return null;
+            var payload = JSON.parse(atob(token.split('.')[1]));
+            return payload.id || payload.sub || payload.customer_id || null;
+        } catch (e) { return null; }
     },
 
     // ─── SECTION 6: SUBMIT FLOW ──────────────────────────────────────────────
@@ -319,6 +407,19 @@ window.APP = {
                 window.APP.calc.price = data.price;
                 window.APP.calc.distance = data.distanceKm || distanceKm || 0;
 
+                // ─── DISTANCE DEBUG TABLE (instrumentation only) ──────────────
+                var backendKm = data.distanceKm || 0;
+                var dbg = window.APP._distanceDebug || {};
+                console.table({
+                    frontend_raw_meters: dbg.rawMeters !== undefined ? dbg.rawMeters : 'N/A',
+                    frontend_km: dbg.frontendKm !== undefined ? parseFloat(dbg.frontendKm.toFixed(3)) : 'N/A',
+                    backend_distance_km: backendKm,
+                    difference_percent: dbg.frontendKm
+                        ? (((backendKm - dbg.frontendKm) / dbg.frontendKm) * 100).toFixed(2) + '%'
+                        : 'N/A'
+                });
+                // ─────────────────────────────────────────────────────────────
+
                 // Update UI with confirmed backend price
                 var fakePrice = Math.ceil((data.price * 1.10) / 500) * 500;
                 var fakeDisplay = document.getElementById('fake-price');
@@ -344,23 +445,31 @@ window.APP = {
     },
 
     // ─── SECTION 7: SUBMIT BUTTON GATE ──────────────────────────────────────
-    // Enabled ONLY when: pickup + dropoff + backend price + within distance limit
+    // Enabled ONLY when: no active order + pickup + dropoff + backend price + within limit
     updateSubmitButton: function () {
         var btn = document.getElementById('btn-submit');
         var btnText = document.getElementById('btn-text');
         if (!btn || !btnText) return;
 
+        var hasActiveOrder = !!window.APP.activeOrder;
         var hasPickup = !!(window.APP.state.pickup && window.APP.state.pickup.lat);
         var hasDropoff = !!(window.APP.state.dropoff && window.APP.state.dropoff.lat);
         var hasPrice = window.APP.calc.price > 0;
         var withinLimit = window.APP.calc.withinLimit !== false; // default true if not set
+        var isPricingLoading = window.APP.uiState === 'PRICING_LOADING';
 
-        if (!hasPickup || !hasDropoff) {
+        if (hasActiveOrder) {
+            btn.classList.add('disabled');
+            btnText.innerText = 'Order Aktif';
+        } else if (!hasPickup || !hasDropoff) {
             btn.classList.add('disabled');
             btnText.innerText = 'Isi Lokasi Dulu';
         } else if (!withinLimit) {
             btn.classList.add('disabled');
             btnText.innerText = 'Jarak Terlalu Jauh';
+        } else if (isPricingLoading) {
+            btn.classList.add('disabled');
+            btnText.innerText = 'Menghitung Harga...';
         } else if (!hasPrice) {
             btn.classList.add('disabled');
             btnText.innerText = 'Menunggu Harga...';
@@ -434,13 +543,42 @@ window.APP = {
 
         var amountEl = document.getElementById('qris-amount');
         var modal = document.getElementById('modal-qris');
+        var countdownEl = document.getElementById('qris-countdown');
 
         if (amountEl && modal) {
             amountEl.innerText = 'Rp ' + (order.payment.expected_amount).toLocaleString('id-ID');
             modal.classList.remove('hidden');
             modal.style.display = 'flex';
-            // Done button handled by global finishQrisPayment binding
+
+            // Start 15-minute countdown
+            window.APP._startQrisCountdown(15 * 60, countdownEl);
         }
+    },
+
+    _startQrisCountdown: function (totalSeconds, el) {
+        // Clear any existing timer
+        if (window.APP._qrisCountdownTimer) clearInterval(window.APP._qrisCountdownTimer);
+        var remaining = totalSeconds;
+
+        function format(s) {
+            var m = Math.floor(s / 60);
+            var sec = s % 60;
+            return (m < 10 ? '0' : '') + m + ':' + (sec < 10 ? '0' : '') + sec;
+        }
+
+        if (el) el.innerText = format(remaining);
+
+        window.APP._qrisCountdownTimer = setInterval(function () {
+            remaining--;
+            if (el) el.innerText = format(remaining);
+            if (remaining <= 0) {
+                clearInterval(window.APP._qrisCountdownTimer);
+                window.APP._qrisCountdownTimer = null;
+                if (el) el.innerText = 'EXPIRED';
+                // Sync with backend — payment may have timed out
+                window.APP.fetchActiveOrder();
+            }
+        }, 1000);
     },
 
     closeQrisModal: function () {
@@ -448,6 +586,11 @@ window.APP = {
         if (modal) {
             modal.classList.add('hidden');
             modal.style.display = 'none';
+        }
+        // Clear countdown timer
+        if (window.APP._qrisCountdownTimer) {
+            clearInterval(window.APP._qrisCountdownTimer);
+            window.APP._qrisCountdownTimer = null;
         }
     }
 };
@@ -458,10 +601,19 @@ window.updateLink = function () { window.APP.updateSubmitButton(); };
 window.submitOrder = function () { window.APP.submitOrder(); };
 window.closeQrisModal = function () { window.APP.closeQrisModal(); };
 window.openQrisModal = function (o) { window.APP.openQrisModal(o); };
+window.cancelActiveOrder = function () { window.APP.cancelActiveOrder(); };
 window.finishQrisPayment = async function () {
-    window.closeQrisModal();
-    window.showToast('⏳ Mengecek pembayaran...');
+    if (window.showToast) window.showToast('⏳ Mengecek pembayaran...');
+    // Do NOT close modal yet — wait for backend confirmation
     await window.APP.fetchActiveOrder();
+    // If still WAITING_PAYMENT, reopen modal
+    var order = window.APP.activeOrder;
+    if (order && order.status === 'WAITING_PAYMENT') {
+        if (window.showToast) window.showToast('Pembayaran belum terkonfirmasi. Coba lagi.');
+        window.APP.openQrisModal(order);
+    } else {
+        window.APP.closeQrisModal();
+    }
 };
 
 document.addEventListener('DOMContentLoaded', window.APP.initApp);
