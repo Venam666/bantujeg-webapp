@@ -300,11 +300,52 @@ window.APP_MAP = {
     },
 
     // ─── MAP PICKER ──────────────────────────────────────────────────────────
+
+    // Internal singleton initializer — retries if element has no dimensions yet
+    _initPickerMap: function () {
+        // Singleton: only ever create one instance
+        if (pickerMap) {
+            google.maps.event.trigger(pickerMap, 'resize');
+            return;
+        }
+
+        var el = document.getElementById('picker-map');
+        if (!el) {
+            console.error('[_initPickerMap] #picker-map not found');
+            return;
+        }
+
+        // Retry if element still has no layout dimensions (modal not painted yet)
+        if (el.offsetWidth === 0 || el.offsetHeight === 0) {
+            console.warn('[_initPickerMap] element has no dimensions, retrying in 100ms...');
+            setTimeout(window.APP_MAP._initPickerMap, 100);
+            return;
+        }
+
+        var mapSettings = window.APP_MAP.getServiceMapSettings(window.APP.service);
+        pickerMap = new google.maps.Map(el, {
+            center: mapSettings.center,
+            zoom: mapSettings.zoom + 4,
+            gestureHandling: 'greedy',
+            disableDefaultUI: true,
+            clickableIcons: false,
+            zoomControl: true
+        });
+        window.APP.pickerMap = pickerMap;
+
+        pickerMap.addListener('idle', function () {
+            var center = pickerMap.getCenter();
+            window.APP.picker.currentLocation = { lat: center.lat(), lng: center.lng() };
+        });
+
+        google.maps.event.trigger(pickerMap, 'resize');
+    },
+
     openMapPicker: function (type) {
         window.APP.picker.locked = true;
         window.APP.picker.activeField = type === 'origin' ? 'pickup' : 'dropoff';
 
-        // STEP A: Show the modal first
+        // STEP A: Show the modal
         var modal = document.getElementById('map-picker-modal');
         if (!modal) return;
         modal.classList.add('active');
@@ -318,69 +359,50 @@ window.APP_MAP = {
 
         history.pushState({ mapPicker: true }, '', '');
 
-        // STEP B: Wait for CSS transition to finish and element to have dimensions
-        // 300ms matches typical modal transition duration
-        setTimeout(function () {
-            var pickerEl = document.getElementById('picker-map');
-            if (!pickerEl) {
-                console.error('[openMapPicker] #picker-map element not found');
-                return;
-            }
+        // STEP B: Double rAF + setTimeout — guarantees two full paint cycles
+        // before touching the map element. This eliminates IntersectionObserver crash.
+        requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+                setTimeout(function () {
+                    // STEP C: Initialize picker map (singleton, retries if hidden)
+                    window.APP_MAP._initPickerMap();
 
-            // STEP C: Only initialize pickerMap if not already done
-            if (!pickerMap) {
-                var mapSettings = window.APP_MAP.getServiceMapSettings(window.APP.service);
-                pickerMap = new google.maps.Map(pickerEl, {
-                    center: mapSettings.center,
-                    zoom: mapSettings.zoom + 4,
-                    gestureHandling: 'greedy',
-                    disableDefaultUI: true,
-                    clickableIcons: false,
-                    zoomControl: true
-                });
-                window.APP.pickerMap = pickerMap;
+                    if (!pickerMap) return; // _initPickerMap will retry itself
 
-                pickerMap.addListener('idle', function () {
-                    var center = pickerMap.getCenter();
-                    window.APP.picker.currentLocation = { lat: center.lat(), lng: center.lng() };
-                });
-            }
+                    // STEP D: Center on existing place or user GPS
+                    var field = type === 'origin' ? 'origin' : 'dest';
+                    var existingPlace = window.APP.places[field];
+                    var mapSettings = window.APP_MAP.getServiceMapSettings(window.APP.service);
 
-            // STEP D: Always trigger resize after showing
-            google.maps.event.trigger(pickerMap, 'resize');
-
-            // Center on existing place or user GPS
-            var field = type === 'origin' ? 'origin' : 'dest';
-            var existingPlace = window.APP.places[field];
-            var mapSettings = window.APP_MAP.getServiceMapSettings(window.APP.service);
-
-            if (existingPlace && existingPlace.geometry) {
-                var lat = existingPlace.geometry.location.lat();
-                var lng = existingPlace.geometry.location.lng();
-                window.APP.picker.currentLocation = { lat: lat, lng: lng };
-                pickerMap.setCenter({ lat: lat, lng: lng });
-                pickerMap.setZoom(18);
-            } else if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    function (pos) {
-                        var lat = pos.coords.latitude;
-                        var lng = pos.coords.longitude;
+                    if (existingPlace && existingPlace.geometry) {
+                        var lat = existingPlace.geometry.location.lat();
+                        var lng = existingPlace.geometry.location.lng();
                         window.APP.picker.currentLocation = { lat: lat, lng: lng };
                         pickerMap.setCenter({ lat: lat, lng: lng });
                         pickerMap.setZoom(18);
-                    },
-                    function () {
+                    } else if (navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition(
+                            function (pos) {
+                                var lat = pos.coords.latitude;
+                                var lng = pos.coords.longitude;
+                                window.APP.picker.currentLocation = { lat: lat, lng: lng };
+                                pickerMap.setCenter({ lat: lat, lng: lng });
+                                pickerMap.setZoom(18);
+                            },
+                            function () {
+                                window.APP.picker.currentLocation = mapSettings.center;
+                                pickerMap.setCenter(mapSettings.center);
+                                pickerMap.setZoom(mapSettings.zoom + 4);
+                            }
+                        );
+                    } else {
                         window.APP.picker.currentLocation = mapSettings.center;
                         pickerMap.setCenter(mapSettings.center);
                         pickerMap.setZoom(mapSettings.zoom + 4);
                     }
-                );
-            } else {
-                window.APP.picker.currentLocation = mapSettings.center;
-                pickerMap.setCenter(mapSettings.center);
-                pickerMap.setZoom(mapSettings.zoom + 4);
-            }
-        }, 300);
+                }, 50);
+            });
+        });
     },
 
     closeMapPicker: function () {
@@ -626,11 +648,11 @@ function initMap() {
         dr.setMap(map);
         window.APP.directionsRenderer = dr;
 
-        // Geocoder
+        // Geocoder (lazy init for picker/GPS, but pre-warm here)
         geocoder = new google.maps.Geocoder();
 
         // Autocomplete — deferred 500ms so Maps API internals fully settle
-        // This prevents "Cannot access 'Ea' before initialization"
+        // Prevents "Cannot access 'Ea' before initialization"
         setTimeout(function () {
             window.APP_MAP.initAutocomplete();
         }, 500);
