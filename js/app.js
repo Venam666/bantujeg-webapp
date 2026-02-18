@@ -128,9 +128,10 @@ window.APP = {
             });
 
             if (res.status === 401 || res.status === 403) {
-                // Change 5: session expired — do NOT show login screen.
-                // Trigger silent refresh: send a new magic link to stored phone.
-                console.warn('[ORDERS] 401 on /orders/active — triggering silent refresh.');
+                // Session token expired. bj_phone is permanent — never delete it.
+                // Remove only the dead token. Trigger silent refresh.
+                console.warn('[ORDERS] 401 on /orders/active. Token expired — triggering silent refresh.');
+                localStorage.removeItem('bj_token');
                 if (window.APP_AUTH && window.APP_AUTH.silentRefresh) {
                     window.APP_AUTH.silentRefresh();
                 }

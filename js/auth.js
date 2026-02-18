@@ -65,12 +65,13 @@ window.APP_AUTH = {
                 return true;
             }
 
-            if (res.status === 401 || res.status === 403) {
-                // Change 1: session not found in Firestore — do NOT show login.
-                // Trigger silent refresh: send a new magic link to stored phone.
-                console.warn('[AUTH] Session 401 on /auth/me — attempting silent refresh.');
+            if (res.status === 401) {
+                // Token expired in Firestore. bj_phone is still valid — user is known.
+                // Remove only the dead token. Keep the phone. Send a fresh magic link silently.
+                console.warn('[AUTH] Session expired (401). Refreshing silently — user stays in app.');
+                localStorage.removeItem('bj_token');
                 window.APP_AUTH.silentRefresh();
-                return false;
+                return;
             }
 
             // Any other error (500, etc.) — do nothing. Stay on current screen.
@@ -87,32 +88,33 @@ window.APP_AUTH = {
     // Triggered when session is expired/wiped from Firestore.
     silentRefresh: async function () {
         var phone = localStorage.getItem('bj_phone');
+
+        // If no phone stored, this is a truly new device — show login (first time only).
         if (!phone) {
-            // No phone stored — truly first-time user. Show login.
-            console.warn('[AUTH] No phone in storage. First-time user — showing login.');
+            console.warn('[AUTH] silentRefresh: no phone stored. First-time device. Showing login.');
             window.APP_AUTH.showLogin();
             return;
         }
 
+        // Phone is known. Request a fresh magic link to their WhatsApp.
+        // DO NOT show the login screen. User stays in the app.
         try {
-            console.log('[AUTH] Silent refresh: requesting new magic link for stored phone.');
             var res = await fetch(window.API_URL + '/auth/request-login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ phone: phone })
             });
             if (res.ok) {
-                // Magic link sent. Show toast — do NOT show login screen.
+                console.log('[AUTH] silentRefresh: new magic link sent to', phone.slice(0, 5) + '***');
                 if (window.showToast) {
-                    window.showToast('Sesi kamu habis. Link masuk baru sudah dikirim ke WhatsApp kamu \uD83D\uDCF2', 6000);
+                    window.showToast('Sesi kamu habis. Link masuk baru sudah dikirim ke WhatsApp kamu 📲', 7000);
                 }
-                console.log('[AUTH] Silent refresh: new magic link sent. User stays on app.');
             } else {
-                console.warn('[AUTH] Silent refresh failed (' + res.status + '). Staying on current screen.');
+                console.warn('[AUTH] silentRefresh: request-login failed with status', res.status);
             }
         } catch (e) {
             // Network error — do nothing. User stays on current screen.
-            console.warn('[AUTH] Silent refresh network error:', e.message);
+            console.warn('[AUTH] silentRefresh: network error', e.message);
         }
     },
 
