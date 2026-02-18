@@ -141,8 +141,8 @@ window.APP_MAP = {
     fetchPricingConfig: function () {
         console.log('[PRICING] Fetching config from backend...');
 
-        // Use window.API_URL defined in auth.js
-        var apiUrl = (window.API_URL || 'http://localhost:8080') + '/pricing/config';
+        // Use endpoint: /orders/config
+        var apiUrl = (window.API_URL || 'http://localhost:8080') + '/orders/config';
 
         fetch(apiUrl)
             .then(function (res) {
@@ -150,9 +150,7 @@ window.APP_MAP = {
                 return res.json();
             })
             .then(function (data) {
-                // Determine if structure is { success: true, data: {...} } or just {...}
                 var config = data.success && data.data ? data.data : data;
-
                 if (Object.keys(config).length === 0) throw new Error('Empty config');
 
                 console.log('[PRICING] Configuration loaded:', config);
@@ -177,30 +175,18 @@ window.APP_MAP = {
 
         var price = 0;
 
-        // Unified Calculation Logic based on Backend Structure
-        // Check for 'pricing_model' (Backend V2) or simple flat (Fallback)
+        // Unified Calculation Logic for supplied structure
         if (config.base_price !== undefined) {
-            // Simple Logic (Fallback Style)
             if (distance <= config.base_distance_km) {
                 price = config.base_price;
             } else {
                 price = config.base_price + ((distance - config.base_distance_km) * config.price_per_km);
             }
-        } else if (config.pricing_model) {
-            // Complex Tiered Logic (Future Proofing)
-            var tiers = config.pricing_model.tiers;
-            if (Array.isArray(tiers)) {
-                var tier = tiers.find(function (t) { return distance >= t.min_km && distance < t.max_km; })
-                    || tiers[tiers.length - 1];
-
-                if (tier.calculation_type === 'FLAT') price = tier.base_price;
-                else price = tier.base_price + ((distance - tier.offset_km) * tier.price_per_km);
-            }
         }
 
         // Car Seat Surge
         if (service === 'CAR' && window.APP.carOptions.seats === 6) {
-            price *= 1.3; // 30% surcharge
+            price *= 1.3;
         }
 
         // Rounding up to nearest 500
@@ -222,7 +208,6 @@ window.APP_MAP = {
         var dest = window.APP.places.dest;
         if (!origin || !dest) return;
 
-        // Base Check (Salatiga)
         var SALATIGA = { lat: -7.3305, lng: 110.5084 };
         var distFromBase = google.maps.geometry.spherical.computeDistanceBetween(
             origin.geometry.location,
@@ -240,7 +225,7 @@ window.APP_MAP = {
         var serviceKey = window.APP.service;
 
         // STRICT ROUTING MODE based on Service Type
-        var travelMode = google.maps.TravelMode.TWO_WHEELER; // Default
+        var travelMode = google.maps.TravelMode.TWO_WHEELER; // Default for RIDE, SEND, FOOD
         if (serviceKey === 'CAR') {
             travelMode = google.maps.TravelMode.DRIVING;
         }
@@ -282,10 +267,13 @@ window.APP_MAP = {
                     : FALLBACK_CONFIG[serviceKey];
 
                 var logic = config.distance_logic || { lmf: 1.25, detour_limit: 1.15 };
-                var motorEstimate = straightKm * logic.lmf;
 
-                if (distanceKm > motorEstimate * logic.detour_limit) finalKm = motorEstimate;
-                else if (distanceKm < straightKm * 1.05) finalKm = straightKm * 1.10;
+                // Only apply logic if lmf/detour_limit exists (RIDE usually has it)
+                if (logic && logic.lmf) {
+                    var motorEstimate = straightKm * logic.lmf;
+                    if (distanceKm > motorEstimate * logic.detour_limit) finalKm = motorEstimate;
+                    else if (distanceKm < straightKm * 1.05) finalKm = straightKm * 1.10;
+                }
             }
 
             window.APP.calc = { distance: parseFloat(finalKm.toFixed(2)), duration: durationMins };
@@ -452,8 +440,6 @@ window.APP_MAP = {
     },
 
     confirmLocation: function () {
-        // ... (Logic identical to previous, keeping it concise for brevity in this task rewrite, essentially confirms and reverse geocodes)
-        // For full code output, I must include it.
         var activeField = window.APP.picker.activeField;
         var loc = window.APP.picker.currentLocation;
         if (!activeField || !loc) return;
@@ -496,7 +482,6 @@ window.APP_MAP = {
     },
 
     getCurrentLocation: function (inputType) {
-        // ... (Same as before)
         if (window.APP.picker.locked) return;
         if (!navigator.geolocation) { alert('Browser tidak support GPS'); return; }
 
@@ -552,7 +537,6 @@ window.confirmLocation = window.APP_MAP.confirmLocation;
 window.getCurrentLocation = window.APP_MAP.getCurrentLocation;
 window.getServiceMapSettings = window.APP_MAP.getServiceMapSettings;
 
-// ... (Other helpers expandMap, setActiveField, etc. from Step 108 are assumed present or I should include them if FULL CODE is required. I will include them to be safe.)
 window.expandMap = function () { document.getElementById('map-container').classList.add('expanded'); };
 window.setActiveField = function (field) { if (window.APP && window.APP.picker) window.APP.picker.activeField = field; };
 window.toggleClearBtn = function (id) {
@@ -577,7 +561,7 @@ window.clearInput = function (id) {
         window.updateLink();
     }
 };
-window.handleInput = function (id) { window.toggleClearBtn(id); }; // Simple version
+window.handleInput = function (id) { window.toggleClearBtn(id); };
 window.addNote = function (text) {
     var noteInput = document.getElementById('note');
     if (!noteInput) return;
@@ -604,7 +588,7 @@ function initMap() {
     if (!document.getElementById('map')) return;
 
     try {
-        // FETCH PRICING first thing
+        // FETCH PRICING (from new endpoint)
         window.APP_MAP.fetchPricingConfig();
 
         var mapSettings = window.APP_MAP.getServiceMapSettings('RIDE');
