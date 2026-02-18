@@ -592,6 +592,13 @@ window.APP = {
             clearInterval(window.APP._qrisCountdownTimer);
             window.APP._qrisCountdownTimer = null;
         }
+    },
+
+    cancelQrisPayment: function () {
+        // 1. Cancel the active order (unlocks form)
+        window.APP.cancelActiveOrder();
+        // 2. Hide the modal instantly
+        window.APP.closeQrisModal();
     }
 };
 
@@ -602,6 +609,7 @@ window.submitOrder = function () { window.APP.submitOrder(); };
 window.closeQrisModal = function () { window.APP.closeQrisModal(); };
 window.openQrisModal = function (o) { window.APP.openQrisModal(o); };
 window.cancelActiveOrder = function () { window.APP.cancelActiveOrder(); };
+window.cancelQrisPayment = function () { window.APP.cancelQrisPayment(); };
 window.finishQrisPayment = async function () {
     if (window.showToast) window.showToast('⏳ Mengecek pembayaran...');
     // Do NOT close modal yet — wait for backend confirmation
