@@ -8,7 +8,6 @@ window.APP = {
         pickup: { lat: null, lng: null, source: null, address: '' },
         dropoff: { lat: null, lng: null, source: null, address: '' }
     },
-    // Config will be loaded from backend, falling back if needed
     config: {},
     places: { origin: null, dest: null },
     markers: { origin: null, dest: null },
@@ -20,15 +19,74 @@ window.APP = {
         geocodeRequest: null
     },
     carOptions: { seats: 4, toll: false },
-    // Global Cache for History
-    historyData: null
+    historyData: null,
+
+    // New Helper: Centralized API Sender
+    sendOrderToBackend: function (payload, endpoint) {
+        if (window.isSubmitting) return;
+        window.isSubmitting = true;
+
+        var btn = document.getElementById('btn-submit');
+        var qrisBtn = document.getElementById('btn-qris-done');
+        var activeBtn = endpoint.includes('qris') ? qrisBtn : btn;
+
+        var originalText = activeBtn ? activeBtn.innerText : '';
+        if (activeBtn) {
+            activeBtn.innerText = '⏳ Memproses...';
+            activeBtn.disabled = true;
+        }
+
+        var apiUrl = (window.API_URL || 'http://localhost:8080');
+
+        console.log('Sending Order to ' + endpoint, payload);
+
+        fetch(apiUrl + endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+            .then(async function (res) {
+                if (!res.ok) {
+                    var text = await res.text();
+                    console.error('API Error Body:', text);
+                    try { return JSON.parse(text); } catch (e) { throw new Error('Server Error: ' + res.status); }
+                }
+                return res.json();
+            })
+            .then(function (data) {
+                window.isSubmitting = false;
+                if (activeBtn) {
+                    activeBtn.innerText = originalText;
+                    activeBtn.disabled = false;
+                }
+
+                if (data && (data.success || data.orderId)) {
+                    // Success! Redirect or Show Success
+                    var whatsappUrl = data.whatsappUrl || data.wa_link;
+                    if (whatsappUrl) {
+                        window.location.href = whatsappUrl;
+                    } else {
+                        alert('Order berhasil dibuat! ID: ' + (data.orderId || data.id));
+                        // Optional: Reset form
+                    }
+                } else {
+                    alert('Gagal membuat order: ' + (data.message || 'Unknown error'));
+                }
+            })
+            .catch(function (error) {
+                window.isSubmitting = false;
+                if (activeBtn) {
+                    activeBtn.innerText = originalText;
+                    activeBtn.disabled = false;
+                }
+                console.error('Submit Error:', error);
+                alert('Terjadi kesalahan koneksi. Silakan coba lagi.');
+            });
+    }
 };
 
 // ─── INIT ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function () {
-    // Note: Main init is triggered by Maps callback (initMap)
-    // But we can init some UI listeners here
-
     // Service Tabs
     document.querySelectorAll('.tab').forEach(function (el) {
         el.addEventListener('click', function () {
@@ -51,46 +109,27 @@ document.addEventListener('DOMContentLoaded', function () {
 // ─── SERVICE SWITCHING ──────────────────────────────────────────────────────
 window.setService = function (serviceName, el) {
     if (!serviceName) return;
-
     window.APP.service = serviceName;
-
-    // UI Updates
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     if (el) el.classList.add('active');
 
-    // Show/Hide Service Options
     var extras = document.getElementById('food-mart-extras');
     var carOpts = document.getElementById('car-options');
-
     if (extras) extras.style.display = (serviceName === 'FOOD_MART' || serviceName === 'FOOD' || serviceName === 'MART') ? 'block' : 'none';
     if (carOpts) carOpts.style.display = (serviceName === 'CAR') ? 'block' : 'none';
 
-    // Update Map Route & Price if points exist
     if (window.APP.places.origin && window.APP.places.dest) {
-        // Recalculate everything
-        if (window.APP_MAP && window.APP_MAP.drawRoute) {
-            window.APP_MAP.drawRoute();
-        }
+        if (window.APP_MAP && window.APP_MAP.drawRoute) window.APP_MAP.drawRoute();
     } else {
-        // Just update placeholder pricing logic locally if needed? 
-        // No, map.js handles price display. 
-        // Just hide price card if invalid
         var priceCard = document.getElementById('price-card');
         if (priceCard) priceCard.style.display = 'none';
     }
-
-    // Update WhatsApp Link (Deep Link)
     window.updateLink();
 };
 
-window.updateLink = function () {
-    // This function generates the "Legacy" WA link as a backup
-    // But mostly we rely on submitOrder() now.
-    // We can leave it empty or just minimal update.
-    // For MVP, we stick to API calls.
-};
+window.updateLink = function () { };
 
-// ─── ORDER SUBMISSION ───────────────────────────────────────────────────────
+// ─── ORDER SUBMISSION (STRICT FLOW) ─────────────────────────────────────────
 window.submitOrder = function () {
     // 1. Validation
     if (!window.APP.state.pickup.lat || !window.APP.state.dropoff.lat) {
@@ -103,59 +142,9 @@ window.submitOrder = function () {
         return;
     }
 
+    // 2. Prepare Payload
     var paymentSelect = document.getElementById('payment-method');
     var paymentMethod = paymentSelect ? paymentSelect.value : 'CASH';
-
-    // 2. Prepare Payload
-    // Note: We use window.API_URL from auth.js
-    var apiUrl = window.API_URL || 'http://localhost:8080';
-    var token = localStorage.getItem('bj_token');
-
-    // 3. Payment Flow Branching
-    if (paymentMethod === 'QRIS') {
-        // Open QRIS Modal
-        window.openQrisModal();
-    } else {
-        // CASH -> Direct Submit
-        window.processOrder('CASH');
-    }
-};
-
-// ─── QRIS LOGIC ─────────────────────────────────────────────────────────────
-window.openQrisModal = function () {
-    var modal = document.getElementById('modal-qris');
-    var amountEl = document.getElementById('qris-amount');
-
-    if (modal && amountEl) {
-        amountEl.innerText = 'Rp ' + (window.APP.calc.price || 0).toLocaleString('id-ID');
-        modal.classList.remove('hidden');
-    }
-};
-
-window.closeQrisModal = function () {
-    var modal = document.getElementById('modal-qris');
-    if (modal) modal.classList.add('hidden');
-};
-
-window.finishQrisPayment = function () {
-    // User claims they paid.
-    // In a real app, we might poll for status.
-    // For MVP, we trust the user click and send the order to /qris endpoint
-    window.processOrder('QRIS');
-};
-
-// ─── API PROCESSOR ──────────────────────────────────────────────────────────
-window.processOrder = function (method) {
-    if (window.isSubmitting) return;
-    window.isSubmitting = true;
-
-    var btn = method === 'QRIS' ? document.getElementById('btn-qris-done') : document.getElementById('btn-submit');
-    var originalText = btn ? btn.innerText : '';
-    if (btn) btn.innerText = '⏳ Memproses...';
-    if (btn) btn.disabled = true;
-
-    var apiUrl = (window.API_URL || 'http://localhost:8080');
-    var endpoint = method === 'QRIS' ? '/orders/qris' : '/orders/create';
 
     var payload = {
         service: window.APP.service,
@@ -172,61 +161,49 @@ window.processOrder = function (method) {
         origin: window.APP.state.pickup.address,
         destination: window.APP.state.dropoff.address,
         note: document.getElementById('note').value,
-        price: window.APP.calc.price // Optional hint to backend
+        price: window.APP.calc.price
     };
 
-    if (method === 'CASH') {
+    if (paymentMethod === 'CASH') {
         payload.paymentMethod = 'CASH';
     }
-
     // Service Extras
     if (window.APP.service === 'FOOD_MART') {
         payload.items = document.getElementById('items').value;
         payload.estPrice = document.getElementById('est-price').value;
     }
 
-    console.log('Sending Order:', payload);
+    // 3. Strict Branching
+    if (paymentMethod === 'QRIS') {
+        // A. Show Modal
+        var modal = document.getElementById('modal-qris');
+        var amountEl = document.getElementById('qris-amount');
+        if (modal && amountEl) {
+            amountEl.innerText = 'Rp ' + (window.APP.calc.price || 0).toLocaleString('id-ID');
+            modal.classList.remove('hidden');
+        }
 
-    fetch(apiUrl + endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    })
-        .then(async function (res) {
-            // Pre-flight check for Vercel 404s
-            if (!res.ok) {
-                console.error('API Error Status:', res.status);
-                var text = await res.text();
-                console.error('API Error Body:', text.substring(0, 100)); // Log first 100 chars
-                try { return JSON.parse(text); } catch (e) { throw new Error('Server Error: ' + res.status); }
-            }
-            return res.json();
-        })
-        .then(function (data) {
-            window.isSubmitting = false;
-            if (btn) btn.innerText = originalText;
-            if (btn) btn.disabled = false;
-            if (method === 'QRIS') window.closeQrisModal();
+        // B. Bind Click Handler (Closure captures payload)
+        var doneBtn = document.getElementById('btn-qris-done');
+        if (doneBtn) {
+            doneBtn.onclick = function () {
+                // Close modal
+                if (modal) modal.classList.add('hidden');
+                // Send to QRIS endpoint
+                window.APP.sendOrderToBackend(payload, '/orders/qris');
+            };
+        }
+        return; // STOP execution here for QRIS
+    }
 
-            if (data && (data.success || data.orderId)) {
-                // Success! Redirect or Show Success
-                var whatsappUrl = data.whatsappUrl || data.wa_link; // Handle both formats
-                if (whatsappUrl) {
-                    window.location.href = whatsappUrl;
-                } else {
-                    alert('Order berhasil dibuat! ID: ' + (data.orderId || data.id));
-                }
-            } else {
-                alert('Gagal membuat order: ' + (data.message || 'Unknown error'));
-            }
-        })
-        .catch(function (error) {
-            window.isSubmitting = false;
-            if (btn) btn.innerText = originalText;
-            if (btn) btn.disabled = false;
-            if (method === 'QRIS') window.closeQrisModal();
-
-            console.error('Submit Error:', error);
-            alert('Terjadi kesalahan koneksi. Silakan coba lagi.');
-        });
+    // IF CASH -> Direct Submit
+    window.APP.sendOrderToBackend(payload, '/orders/create');
 };
+
+// ─── QRIS HELPERS ───────────────────────────────────────────────────────────
+window.closeQrisModal = function () {
+    var modal = document.getElementById('modal-qris');
+    if (modal) modal.classList.add('hidden');
+};
+
+// window.processOrder removed in favor of window.APP.sendOrderToBackend
