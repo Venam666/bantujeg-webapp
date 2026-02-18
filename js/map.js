@@ -2,30 +2,20 @@
    map.js - The Maps Cables
    ======================== */
 
-// ─── 0. PRICING AUTHORITY (SOURCE OF TRUTH) ─────────────────────────────────
-// Fallback configuration if backend is unreachable
-const FALLBACK_CONFIG = {
-    RIDE: {
-        base_price: 8000,
-        base_distance_km: 2,
-        price_per_km: 2000,
-        distance_logic: { lmf: 1.25, detour_limit: 1.15 }
-    },
-    CAR: {
-        base_price: 15000,
-        base_distance_km: 2,
-        price_per_km: 3500
-    },
-    FOOD_MART: {
-        base_price: 4000,
-        base_distance_km: 0,
-        price_per_km: 2000
-    },
-    SEND: {
-        base_price: 8000,
-        base_distance_km: 2,
-        price_per_km: 2000
-    }
+// ─── 0. CONSTANTS ────────────────────────────────────────────────────────────
+// Java island bounding box — map never shows outside this
+var JAVA_BOUNDS = {
+    south: -9.5, west: 104.5,
+    north: -5.0, east: 115.5
+};
+
+// Max distance per service type (km) — enforced AFTER route calculation
+var MAX_DISTANCE_KM = {
+    RIDE: 30,
+    SEND: 30,
+    FOOD_MART: 30,
+    CAR: 150,
+    CAR_XL: 150
 };
 
 // ─── 1. TOP-LEVEL DECLARATIONS ONLY ─────────────────────────────────────────
@@ -137,94 +127,6 @@ window.APP_MAP = {
         }
     },
 
-    // ─── PRICING ─────────────────────────────────────────────────────────────
-    fetchPricingConfig: function () {
-        console.log('[PRICING] Fetching config from backend...');
-
-        // Use endpoint: /orders/config
-        var apiUrl = (window.API_URL || 'http://localhost:8080') + '/orders/config';
-
-        fetch(apiUrl)
-            .then(function (res) {
-                if (!res.ok) throw new Error('Network response was not ok');
-                return res.json();
-            })
-            .then(function (data) {
-                var config = data.success && data.data ? data.data : data;
-                if (Object.keys(config).length === 0) throw new Error('Empty config');
-
-                console.log('[PRICING] Configuration loaded:', config);
-                window.APP.config = config;
-            })
-            .catch(function (error) {
-                console.warn('[PRICING] Failed to load config, using FALLBACK.', error);
-                window.APP.config = FALLBACK_CONFIG;
-            });
-    },
-
-    calculatePrice: function (distance) {
-        // DISPLAY ONLY — backend remains pricing authority
-        // This function NEVER sets APP.calc.price. Submit button stays disabled.
-        var service = window.APP.service;
-
-        // Try backend config first (tiered), fall back to simple FALLBACK_CONFIG
-        var backendConfig = window.APP.getPricingConfig ? window.APP.getPricingConfig(service) : null;
-        var estimate = 0;
-
-        if (backendConfig && backendConfig.pricing_model && backendConfig.pricing_model.tiers) {
-            // Use tiered model from backend config
-            var tiers = backendConfig.pricing_model.tiers;
-            var tier = null;
-            for (var i = 0; i < tiers.length; i++) {
-                if (distance >= tiers[i].min_km && distance < tiers[i].max_km) {
-                    tier = tiers[i];
-                    break;
-                }
-            }
-            // Use last tier if beyond all ranges
-            if (!tier) tier = tiers[tiers.length - 1];
-
-            if (tier) {
-                if (tier.calculation_type === 'FLAT') {
-                    estimate = tier.base_price;
-                } else {
-                    estimate = tier.base_price + ((distance - tier.offset_km) * tier.price_per_km);
-                }
-            }
-
-            // Rounding policy
-            var policy = backendConfig.pricing_model.rounding_policy || 'NEAREST_500_UP';
-            var roundTo = policy === 'NEAREST_100_UP' ? 100 : 500;
-            estimate = Math.ceil(estimate / roundTo) * roundTo;
-        } else {
-            // Fallback to simple config
-            var config = FALLBACK_CONFIG[service];
-            if (!config) {
-                console.warn('[PRICING] No fallback config for ' + service);
-                return;
-            }
-            if (distance <= config.base_distance_km) {
-                estimate = config.base_price;
-            } else {
-                estimate = config.base_price + ((distance - config.base_distance_km) * config.price_per_km);
-            }
-            estimate = Math.ceil(estimate / 500) * 500;
-        }
-
-        var fakeEstimate = Math.ceil((estimate * 1.10) / 500) * 500;
-
-        // Show as estimate — APP.calc.price stays 0 (submit stays disabled)
-        var priceDisplay = document.getElementById('price-display');
-        var fakeDisplay = document.getElementById('fake-price');
-        var distDisplay = document.getElementById('dist-display');
-        var priceCard = document.getElementById('price-card');
-        if (priceDisplay) priceDisplay.innerText = '~Rp ' + estimate.toLocaleString('id-ID') + ' — Estimasi sementara';
-        if (fakeDisplay) fakeDisplay.innerText = 'Rp ' + fakeEstimate.toLocaleString('id-ID');
-        if (distDisplay) distDisplay.innerText = distance.toFixed(1) + ' km';
-        if (priceCard) priceCard.style.display = 'flex';
-        // Do NOT call updateSubmitButton — price is not confirmed by backend
-    },
-
     // ─── ROUTING ─────────────────────────────────────────────────────────────
     drawRoute: function () {
         if (!map || !ds || !dr) return;
@@ -232,27 +134,13 @@ window.APP_MAP = {
         var dest = window.APP.places.dest;
         if (!origin || !dest) return;
 
-        var SALATIGA = { lat: -7.3305, lng: 110.5084 };
-        var distFromBase = google.maps.geometry.spherical.computeDistanceBetween(
-            origin.geometry.location,
-            new google.maps.LatLng(SALATIGA.lat, SALATIGA.lng)
-        ) / 1000;
-
-        if (distFromBase > 15) {
-            window.APP_MAP.showError('Mohon maaf Kak, saat ini armada kami hanya melayani penjemputan di area Salatiga & Sekitarnya. 🙏');
-            return;
-        }
-
         window.APP_MAP.setLoading(true);
         document.getElementById('error-card').style.display = 'none';
 
         var serviceKey = window.APP.service;
-
-        // STRICT ROUTING MODE based on Service Type
-        var travelMode = google.maps.TravelMode.TWO_WHEELER; // Default for RIDE, SEND, FOOD
-        if (serviceKey === 'CAR') {
-            travelMode = google.maps.TravelMode.DRIVING;
-        }
+        var travelMode = serviceKey === 'CAR' || serviceKey === 'CAR_XL'
+            ? google.maps.TravelMode.DRIVING
+            : google.maps.TravelMode.TWO_WHEELER;
 
         ds.route({
             origin: origin.geometry.location,
@@ -265,6 +153,7 @@ window.APP_MAP = {
             if (status !== google.maps.DirectionsStatus.OK) {
                 window.APP_MAP.showError('Waduh, rute tidak ditemukan. Coba geser titiknya dikit ya Kak! 🗺️');
                 window.APP.calc.price = 0;
+                window.APP.calc.withinLimit = false;
                 document.getElementById('price-card').style.display = 'none';
                 window.updateLink();
                 return;
@@ -278,32 +167,31 @@ window.APP_MAP = {
             var leg = result.routes[0].legs[0];
             var distanceKm = leg.distance.value / 1000;
             var durationMins = Math.ceil(leg.duration.value / 60);
-            var finalKm = distanceKm;
 
-            // Motor Distance Logic (If Applicable)
-            if (serviceKey !== 'CAR') {
-                var straightKm = google.maps.geometry.spherical.computeDistanceBetween(
-                    leg.start_location, leg.end_location
-                ) / 1000;
-
-                var config = window.APP.config && window.APP.config[serviceKey]
-                    ? window.APP.config[serviceKey]
-                    : FALLBACK_CONFIG[serviceKey];
-
-                var logic = config.distance_logic || { lmf: 1.25, detour_limit: 1.15 };
-
-                // Only apply logic if lmf/detour_limit exists (RIDE usually has it)
-                if (logic && logic.lmf) {
-                    var motorEstimate = straightKm * logic.lmf;
-                    if (distanceKm > motorEstimate * logic.detour_limit) finalKm = motorEstimate;
-                    else if (distanceKm < straightKm * 1.05) finalKm = straightKm * 1.10;
-                }
+            // ─── SECTION 5: MAX DISTANCE ENFORCEMENT ─────────────────────────
+            var maxKm = MAX_DISTANCE_KM[serviceKey] || 30;
+            if (distanceKm > maxKm) {
+                window.APP.calc.price = 0;
+                window.APP.calc.withinLimit = false;
+                window.APP.calc.distance = parseFloat(distanceKm.toFixed(2));
+                document.getElementById('price-card').style.display = 'none';
+                document.getElementById('dist-display').innerText = distanceKm.toFixed(1) + ' km';
+                window.APP_MAP.showError('Jarak melebihi batas layanan (' + maxKm + 'km untuk ' + serviceKey + ')');
+                if (window.showToast) window.showToast('Jarak melebihi batas layanan');
+                window.updateLink();
+                return;
             }
 
-            window.APP.calc = { distance: parseFloat(finalKm.toFixed(2)), duration: durationMins };
-            document.getElementById('dist-display').innerText = window.APP.calc.distance.toFixed(1) + ' km (' + durationMins + ' mnt)';
+            window.APP.calc.withinLimit = true;
+            window.APP.calc = {
+                distance: parseFloat(distanceKm.toFixed(2)),
+                duration: durationMins,
+                price: 0,           // reset — backend will set this
+                withinLimit: true
+            };
+            document.getElementById('dist-display').innerText = distanceKm.toFixed(1) + ' km (' + durationMins + ' mnt)';
 
-            // Backend pricing preview is the ONLY authority for APP.calc.price
+            // ─── SECTION 1: BACKEND IS SOLE PRICING AUTHORITY ────────────────
             var pickup = window.APP.state.pickup;
             var dropoff = window.APP.state.dropoff;
 
@@ -311,23 +199,24 @@ window.APP_MAP = {
                 window.APP.fetchPricePreview(
                     { lat: pickup.lat, lng: pickup.lng },
                     { lat: dropoff.lat, lng: dropoff.lng },
-                    finalKm
+                    distanceKm
                 ).then(function (backendPrice) {
                     if (!backendPrice) {
-                        // Backend failed — show display-only estimate, submit stays DISABLED
-                        console.warn('[PRICING] Backend preview failed. Showing estimate only. Submit disabled.');
+                        // ─── SECTION 2: NO ESTIMASI — just hide and toast ────
+                        console.warn('[PRICING] Backend preview failed. Submit disabled.');
                         window.APP.calc.price = 0;
-                        window.APP_MAP.calculatePrice(finalKm);
-                        window.APP.updateSubmitButton();
+                        document.getElementById('price-card').style.display = 'none';
+                        if (window.showToast) window.showToast('Server pricing sibuk, coba lagi sebentar');
+                        window.updateLink();
+                    } else {
+                        document.getElementById('price-card').style.display = 'flex';
+                        window.updateLink();
                     }
-                    document.getElementById('price-card').style.display = 'flex';
-                    window.updateLink();
                 });
             } else {
-                // No coords yet — show estimate only, submit stays disabled
+                // No coords yet — keep price card hidden, submit disabled
                 window.APP.calc.price = 0;
-                window.APP_MAP.calculatePrice(finalKm);
-                document.getElementById('price-card').style.display = 'flex';
+                document.getElementById('price-card').style.display = 'none';
                 window.updateLink();
             }
         });
@@ -336,13 +225,10 @@ window.APP_MAP = {
     showError: function (msg) {
         var errCard = document.getElementById('error-card');
         var priceCard = document.getElementById('price-card');
-        var btn = document.getElementById('btn-submit');
-        var btnText = document.getElementById('btn-text');
         if (errCard) { errCard.style.display = 'block'; errCard.innerText = '✋ ' + msg; }
         if (priceCard) priceCard.style.display = 'none';
-        if (btn) btn.classList.add('disabled');
-        if (btnText) btnText.innerText = 'Jarak Terlalu Jauh';
         window.APP.calc.price = 0;
+        window.updateLink();
     },
 
     setLoading: function (state) {
@@ -529,6 +415,7 @@ window.APP_MAP = {
         });
     },
 
+    // ─── SECTION 3: GPS — PICKUP ONLY ────────────────────────────────────────
     getCurrentLocation: function (inputType) {
         if (window.APP.picker.locked) return;
         if (!navigator.geolocation) {
@@ -613,6 +500,7 @@ window.clearInput = function (id) {
         if (window.APP.state) window.APP.state[field] = { lat: null, lng: null, source: null, address: '' };
         if (window.APP.markers[type]) { window.APP.markers[type].setMap(null); window.APP.markers[type] = null; }
         window.APP.calc.price = 0;
+        window.APP.calc.withinLimit = false;
         document.getElementById('price-card').style.display = 'none';
         window.updateLink();
     }
@@ -644,16 +532,28 @@ function initMap() {
     if (!document.getElementById('map')) return;
 
     try {
-        // Pricing config fetch removed — price authority is POST /pricing/preview only
         var mapSettings = window.APP_MAP.getServiceMapSettings('RIDE');
 
+        // ─── SECTION 4: JAVA ISLAND BOUNDS ───────────────────────────────────
         map = new google.maps.Map(document.getElementById('map'), {
-            center: mapSettings.center, zoom: mapSettings.zoom, disableDefaultUI: true, clickableIcons: false
+            center: mapSettings.center,
+            zoom: mapSettings.zoom,
+            disableDefaultUI: true,
+            clickableIcons: false,
+            minZoom: 8,
+            restriction: {
+                latLngBounds: JAVA_BOUNDS,
+                strictBounds: false
+            }
         });
         window.APP.map = map;
 
         ds = new google.maps.DirectionsService();
-        dr = new google.maps.DirectionsRenderer({ suppressMarkers: true, preserveViewport: true, polylineOptions: { strokeColor: '#4285F4', strokeWeight: 5 } });
+        dr = new google.maps.DirectionsRenderer({
+            suppressMarkers: true,
+            preserveViewport: true,
+            polylineOptions: { strokeColor: '#4285F4', strokeWeight: 5 }
+        });
         dr.setMap(map);
         window.APP.directionsRenderer = dr;
 

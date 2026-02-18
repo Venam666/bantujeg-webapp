@@ -229,22 +229,27 @@ window.APP = {
         if (bottomBar) bottomBar.style.display = '';
     },
 
-    // ─── SUBMIT FLOW ─────────────────────────────────────────────────────────
+    // ─── SECTION 6: SUBMIT FLOW ──────────────────────────────────────────────
     submitOrder: async function () {
-        // 1. Validate inputs
+        // 1. Gate checks
         if (!window.APP.state.pickup.lat || !window.APP.state.dropoff.lat) {
-            alert('Lengkapi lokasi dulu ya!');
+            if (window.showToast) window.showToast('Lengkapi lokasi dulu ya!');
             return;
         }
         if (!window.APP.calc.price || window.APP.calc.price <= 0) {
-            alert('Tunggu estimasi harga...');
+            if (window.showToast) window.showToast('Tunggu harga dari server dulu...');
+            return;
+        }
+        if (window.APP.calc.withinLimit === false) {
+            if (window.showToast) window.showToast('Jarak melebihi batas layanan');
             return;
         }
 
         // 2. Lock UI
         var btn = document.getElementById('btn-submit');
-        var originalText = btn ? btn.innerText : '';
-        if (btn) { btn.disabled = true; btn.innerText = '⏳ Memproses...'; }
+        var btnText = document.getElementById('btn-text');
+        if (btn) btn.classList.add('disabled');
+        if (btnText) btnText.innerText = '⏳ Memproses...';
 
         try {
             var paymentSelect = document.getElementById('payment-method');
@@ -258,32 +263,24 @@ window.APP = {
             }
 
             if (!response) throw new Error('No response from server');
-
             if (response.error) throw new Error(response.error);
+            if (!response.success && response.message) throw new Error(response.message);
 
-            // 3. Handle Response — always use renderOrderState
-            if (response.status === 'WAITING_PAYMENT' && response.payment && response.payment.expected_amount > 0) {
-                window.APP.activeOrder = response;
-                window.openQrisModal(response);
-            } else if (response.status === 'SEARCHING') {
-                window.APP.activeOrder = response;
-                window.APP.showStatusCard(response);
-            } else {
-                // Unknown state — refetch from backend to get authoritative state
-                await window.APP.fetchActiveOrder();
-            }
+            // 3. Always fetch authoritative state from backend — no local guessing
+            await window.APP.fetchActiveOrder();
 
         } catch (e) {
-            console.error(e);
-            alert('Gagal membuat order: ' + e.message);
+            console.error('[ORDER] Submit failed:', e);
+            if (window.showToast) window.showToast('Gagal membuat order: ' + e.message);
         } finally {
-            if (btn) { btn.disabled = false; btn.innerText = originalText; }
+            // Restore button state via updateSubmitButton
+            window.APP.updateSubmitButton();
         }
     },
 
-    // ─── PRICING PREVIEW ─────────────────────────────────────────────────────
+    // ─── SECTION 1: PRICING PREVIEW ─────────────────────────────────────────
     // Called by map.js after route is calculated. Returns backend-authoritative price.
-    // This is the ONLY function allowed to set APP.calc.price.
+    // This is the ONLY function allowed to set APP.calc.price to a positive value.
     fetchPricePreview: async function (pickupLocation, dropoffLocation, distanceKm) {
         // Show loading state
         var priceDisplay = document.getElementById('price-display');
@@ -303,11 +300,22 @@ window.APP = {
                 })
             });
 
+            // Handle specific backend errors
+            if (res.status === 422) {
+                var errData = await res.json().catch(function () { return {}; });
+                var msg = (errData && errData.message) || 'Layanan tidak tersedia untuk rute ini';
+                if (window.showToast) window.showToast(msg);
+                window.APP.calc.price = 0;
+                if (priceCard) priceCard.style.display = 'none';
+                window.APP.updateSubmitButton();
+                return null;
+            }
+
             if (!res.ok) throw new Error('Preview failed: ' + res.status);
             var data = await res.json();
 
             if (data && data.success && data.price > 0) {
-                // ✅ ONLY place APP.calc.price is set
+                // ✅ ONLY place APP.calc.price is set to a positive value
                 window.APP.calc.price = data.price;
                 window.APP.calc.distance = data.distanceKm || distanceKm || 0;
 
@@ -328,23 +336,37 @@ window.APP = {
             throw new Error('Backend returned no valid price');
         } catch (e) {
             console.warn('[PRICING] Backend preview failed:', e.message);
-            // Ensure price stays 0 — submit stays disabled
             window.APP.calc.price = 0;
+            if (priceCard) priceCard.style.display = 'none';
+            window.APP.updateSubmitButton();
         }
         return null;
     },
 
+    // ─── SECTION 7: SUBMIT BUTTON GATE ──────────────────────────────────────
+    // Enabled ONLY when: pickup + dropoff + backend price + within distance limit
     updateSubmitButton: function () {
         var btn = document.getElementById('btn-submit');
         var btnText = document.getElementById('btn-text');
         if (!btn || !btnText) return;
 
-        if (window.APP.calc.price > 0 && window.APP.state.pickup.lat && window.APP.state.dropoff.lat) {
-            btn.classList.remove('disabled');
-            btnText.innerText = 'Pesan Sekarang →';
-        } else {
+        var hasPickup = !!(window.APP.state.pickup && window.APP.state.pickup.lat);
+        var hasDropoff = !!(window.APP.state.dropoff && window.APP.state.dropoff.lat);
+        var hasPrice = window.APP.calc.price > 0;
+        var withinLimit = window.APP.calc.withinLimit !== false; // default true if not set
+
+        if (!hasPickup || !hasDropoff) {
             btn.classList.add('disabled');
             btnText.innerText = 'Isi Lokasi Dulu';
+        } else if (!withinLimit) {
+            btn.classList.add('disabled');
+            btnText.innerText = 'Jarak Terlalu Jauh';
+        } else if (!hasPrice) {
+            btn.classList.add('disabled');
+            btnText.innerText = 'Menunggu Harga...';
+        } else {
+            btn.classList.remove('disabled');
+            btnText.innerText = 'Pesan Sekarang →';
         }
     },
 
