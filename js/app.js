@@ -128,7 +128,12 @@ window.APP = {
             });
 
             if (res.status === 401 || res.status === 403) {
-                window.APP_AUTH.logout();
+                // Change 5: session expired — do NOT show login screen.
+                // Trigger silent refresh: send a new magic link to stored phone.
+                console.warn('[ORDERS] 401 on /orders/active — triggering silent refresh.');
+                if (window.APP_AUTH && window.APP_AUTH.silentRefresh) {
+                    window.APP_AUTH.silentRefresh();
+                }
                 return;
             }
 

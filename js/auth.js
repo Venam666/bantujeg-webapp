@@ -1,7 +1,8 @@
 /* ========================
    auth.js - Identity Layer
    Rule: User stays logged in forever.
-   Only 401 from backend clears identity.
+   Only explicit logout() shows the login screen.
+   401 from backend triggers silent refresh, not logout.
    ======================== */
 
 // 1. Global API Configuration
@@ -44,34 +45,74 @@ window.APP_AUTH = {
     },
 
     // --- Silent session validation via GET /auth/me ---
-    // Called on page load. Shows main only on success.
+    // NEVER shows login or clears identity. Only refreshes stored phone + expireAt.
     validateSession: async function () {
         try {
             var res = await fetch(window.API_URL + '/auth/me', {
-                credentials: 'include'  // P1: cookie-based auth, no Authorization header
+                credentials: 'include'
             });
 
             if (res.ok) {
                 var data = await res.json();
-                // Refresh phone in storage in case it was missing
                 if (data && data.phone) {
                     localStorage.setItem('bj_phone', data.phone);
                 }
+                // Change 4: store expireAt for future proactive renewal
+                if (data && data.expireAt) {
+                    localStorage.setItem('bj_session_expire', String(data.expireAt));
+                }
                 console.log('[AUTH] Session valid. Identity confirmed:', data.phone);
-                window.APP_AUTH.showMain();
                 return true;
             }
 
-            // 401 or any non-ok: session invalid
-            console.warn('[AUTH] Session invalid (' + res.status + '). Showing login.');
-            window.APP_AUTH.clearIdentity();
-            window.APP_AUTH.showLogin();
+            if (res.status === 401 || res.status === 403) {
+                // Change 1: session not found in Firestore — do NOT show login.
+                // Trigger silent refresh: send a new magic link to stored phone.
+                console.warn('[AUTH] Session 401 on /auth/me — attempting silent refresh.');
+                window.APP_AUTH.silentRefresh();
+                return false;
+            }
+
+            // Any other error (500, etc.) — do nothing. Stay on current screen.
+            console.warn('[AUTH] /auth/me returned', res.status, '— staying on current screen.');
             return false;
         } catch (e) {
-            // Network error — do NOT clear session. Show login as safe fallback.
-            console.warn('[AUTH] /auth/me unreachable. Showing login.', e.message);
-            window.APP_AUTH.showLogin();
+            // Network error — do NOT clear session, do NOT show login.
+            console.warn('[AUTH] /auth/me unreachable. Staying on current screen.', e.message);
             return false;
+        }
+    },
+
+    // Change 2: Silent refresh — sends new magic link WITHOUT showing login screen.
+    // Triggered when session is expired/wiped from Firestore.
+    silentRefresh: async function () {
+        var phone = localStorage.getItem('bj_phone');
+        if (!phone) {
+            // No phone stored — truly first-time user. Show login.
+            console.warn('[AUTH] No phone in storage. First-time user — showing login.');
+            window.APP_AUTH.showLogin();
+            return;
+        }
+
+        try {
+            console.log('[AUTH] Silent refresh: requesting new magic link for stored phone.');
+            var res = await fetch(window.API_URL + '/auth/request-login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone: phone })
+            });
+            if (res.ok) {
+                // Magic link sent. Show toast — do NOT show login screen.
+                if (window.showToast) {
+                    window.showToast('Sesi kamu habis. Link masuk baru sudah dikirim ke WhatsApp kamu \uD83D\uDCF2', 6000);
+                }
+                console.log('[AUTH] Silent refresh: new magic link sent. User stays on app.');
+            } else {
+                console.warn('[AUTH] Silent refresh failed (' + res.status + '). Staying on current screen.');
+            }
+        } catch (e) {
+            // Network error — do nothing. User stays on current screen.
+            console.warn('[AUTH] Silent refresh network error:', e.message);
         }
     },
 
@@ -124,19 +165,43 @@ window.APP_AUTH = {
             return; // Wait for async verify
         }
 
-        // CASE 2: No magic link — check session via /auth/me (cookie-based)
-        // Show loading spinner while checking, not the login form
+        // CASE 2: No magic link in URL.
+        // Check if we have a stored phone (returning user) or not (first-time user).
+        var storedPhone = localStorage.getItem('bj_phone');
+
+        if (storedPhone) {
+            // Returning user — show main immediately (optimistic), validate in background.
+            // Change 3: NEVER show login on 401 — silentRefresh handles that.
+            console.log('[AUTH] Returning user detected. Showing app immediately.');
+            window.APP_AUTH.showMain();
+            window.APP_AUTH.validateSession(); // background — never shows login
+            return;
+        }
+
+        // CASE 3: Truly first-time user — no phone, no session.
+        // Show loading spinner while checking cookie session.
         var loginView = document.getElementById('view-login');
         var mainView = document.getElementById('view-main');
         if (loginView) loginView.style.display = 'none';
         if (mainView) mainView.style.display = 'none';
 
-        // Show a minimal loading indicator
         var loadingEl = document.getElementById('auth-loading');
         if (loadingEl) loadingEl.style.display = 'flex';
 
-        window.APP_AUTH.validateSession().finally(function () {
+        // Try cookie session first — if it works, show main. Otherwise show login.
+        window.APP_AUTH.validateSession().then(function (valid) {
             if (loadingEl) loadingEl.style.display = 'none';
+            if (valid) {
+                // Cookie session is valid — show main
+                window.APP_AUTH.showMain();
+            } else {
+                // No valid session — truly new user.
+                console.log('[AUTH] No session found. Showing login.');
+                window.APP_AUTH.showLogin();
+            }
+        }).catch(function () {
+            if (loadingEl) loadingEl.style.display = 'none';
+            window.APP_AUTH.showLogin();
         });
     },
 
