@@ -2,15 +2,13 @@
    map.js - The Maps Cables
    ======================== */
 
-// ─── 1. TOP-LEVEL DECLARATIONS ONLY (no `new google.maps.*` here) ───────────
-// These are assigned inside initMap() after the API is fully ready.
+// ─── 1. TOP-LEVEL DECLARATIONS ONLY ─────────────────────────────────────────
+// NO `new google.maps.*` here — all instantiation happens inside initMap()
 var map = null;
-var directionsService = null;
-var directionsRenderer = null;
+var ds = null;
+var dr = null;
 var geocoder = null;
 var pickerMap = null;
-var acOrigin = null;
-var acDest = null;
 
 // ─── 2. APP_MAP NAMESPACE ────────────────────────────────────────────────────
 window.APP_MAP = {
@@ -38,8 +36,12 @@ window.APP_MAP = {
         };
     },
 
-    // Called from initMap() only — never at top level
+    // Called only from inside initMap(), never at top level
     initAutocomplete: function () {
+        var originEl = document.getElementById('origin');
+        var destEl = document.getElementById('destination');
+        if (!originEl || !destEl) return;
+
         var bounds = new google.maps.LatLngBounds(
             new google.maps.LatLng(-7.78, 110.05),
             new google.maps.LatLng(-6.88, 110.95)
@@ -52,12 +54,8 @@ window.APP_MAP = {
             types: ['establishment', 'geocode']
         };
 
-        var originEl = document.getElementById('origin');
-        var destEl = document.getElementById('destination');
-        if (!originEl || !destEl) return;
-
-        acOrigin = new google.maps.places.Autocomplete(originEl, options);
-        acDest = new google.maps.places.Autocomplete(destEl, options);
+        var acOrigin = new google.maps.places.Autocomplete(originEl, options);
+        var acDest = new google.maps.places.Autocomplete(destEl, options);
 
         if (map) {
             acOrigin.bindTo('bounds', map);
@@ -83,11 +81,8 @@ window.APP_MAP = {
         window.toggleClearBtn(inputId);
 
         var field = type === 'origin' ? 'pickup' : 'dropoff';
-        var lat = place.geometry.location.lat();
-        var lng = place.geometry.location.lng();
-
-        window.APP_MAP.updateLocationState(field, lat, lng, 'autocomplete', cleaned);
-        window.APP_MAP.updateMarker(type, lat, lng);
+        window.APP_MAP.updateLocationState(field, place.geometry.location.lat(), place.geometry.location.lng(), 'autocomplete', cleaned);
+        window.APP_MAP.updateMarker(type, place.geometry.location.lat(), place.geometry.location.lng());
         window.APP_MAP.drawRoute();
     },
 
@@ -104,12 +99,7 @@ window.APP_MAP = {
             position: { lat: lat, lng: lng },
             map: map,
             icon: { url: iconUrl, scaledSize: new google.maps.Size(40, 40) },
-            label: {
-                text: type === 'origin' ? 'Jemput' : 'Tujuan',
-                color: 'black',
-                fontWeight: 'bold',
-                fontSize: '12px'
-            }
+            label: { text: type === 'origin' ? 'Jemput' : 'Tujuan', color: 'black', fontWeight: 'bold', fontSize: '12px' }
         });
 
         if (markers.origin && markers.dest) {
@@ -173,7 +163,7 @@ window.APP_MAP = {
     },
 
     drawRoute: function () {
-        if (!map || !directionsService || !directionsRenderer) return;
+        if (!map || !ds || !dr) return;
         var origin = window.APP.places.origin;
         var dest = window.APP.places.dest;
         if (!origin || !dest) return;
@@ -199,7 +189,7 @@ window.APP_MAP = {
         var isCar = serviceKey === 'CAR';
         var travelMode = isCar ? google.maps.TravelMode.DRIVING : google.maps.TravelMode.TWO_WHEELER;
 
-        directionsService.route({
+        ds.route({
             origin: origin.geometry.location,
             destination: dest.geometry.location,
             travelMode: travelMode,
@@ -215,7 +205,7 @@ window.APP_MAP = {
                 return;
             }
 
-            directionsRenderer.setDirections(result);
+            dr.setDirections(result);
             if (result.routes[0] && result.routes[0].bounds) {
                 map.fitBounds(result.routes[0].bounds, { padding: 60 });
             }
@@ -223,8 +213,8 @@ window.APP_MAP = {
             var leg = result.routes[0].legs[0];
             var distanceKm = leg.distance.value / 1000;
             var durationMins = Math.ceil(leg.duration.value / 60);
-
             var finalKm = distanceKm;
+
             if (!isCar) {
                 var straightKm = google.maps.geometry.spherical.computeDistanceBetween(
                     leg.start_location, leg.end_location
@@ -236,13 +226,8 @@ window.APP_MAP = {
                 else if (distanceKm < straightKm * 1.05) finalKm = straightKm * 1.10;
             }
 
-            window.APP.calc = {
-                distance: parseFloat(finalKm.toFixed(2)),
-                duration: durationMins
-            };
-
-            document.getElementById('dist-display').innerText =
-                window.APP.calc.distance.toFixed(1) + ' km (' + durationMins + ' mnt)';
+            window.APP.calc = { distance: parseFloat(finalKm.toFixed(2)), duration: durationMins };
+            document.getElementById('dist-display').innerText = window.APP.calc.distance.toFixed(1) + ' km (' + durationMins + ' mnt)';
 
             if (window.APP.calc.distance > maxDistance) {
                 window.APP_MAP.showError('Maaf Kak, jarak pengantaran melebihi batas operasional kami (' + maxDistance + 'km). 🙏');
@@ -266,13 +251,10 @@ window.APP_MAP = {
         }
 
         var price = 0;
-        var tiers = config.pricing_model && config.pricing_model.tiers
-            ? config.pricing_model.tiers
-            : config.TIERS;
+        var tiers = config.pricing_model && config.pricing_model.tiers ? config.pricing_model.tiers : config.TIERS;
 
         if (Array.isArray(tiers)) {
-            var tier = tiers.find(function (t) { return distance >= t.min_km && distance < t.max_km; })
-                || tiers[tiers.length - 1];
+            var tier = tiers.find(function (t) { return distance >= t.min_km && distance < t.max_km; }) || tiers[tiers.length - 1];
             if (tier.calculation_type === 'FLAT') price = tier.base_price;
             else price = tier.base_price + ((distance - tier.offset_km) * tier.price_per_km);
         } else if (tiers && tiers.BASE) {
@@ -282,7 +264,6 @@ window.APP_MAP = {
         }
 
         if (service === 'CAR' && window.APP.carOptions.seats === 6) price *= 1.3;
-
         price = Math.ceil(price / 500) * 500;
         window.APP.calc.price = price;
 
@@ -291,7 +272,6 @@ window.APP_MAP = {
         document.getElementById('price-display').innerText = 'Rp ' + price.toLocaleString('id-ID');
         document.getElementById('dist-display').innerText = distance.toFixed(1) + ' km';
         document.getElementById('price-card').style.display = 'flex';
-
         window.updateLink();
     },
 
@@ -324,6 +304,7 @@ window.APP_MAP = {
         window.APP.picker.locked = true;
         window.APP.picker.activeField = type === 'origin' ? 'pickup' : 'dropoff';
 
+        // STEP A: Show the modal first
         var modal = document.getElementById('map-picker-modal');
         if (!modal) return;
         modal.classList.add('active');
@@ -337,84 +318,69 @@ window.APP_MAP = {
 
         history.pushState({ mapPicker: true }, '', '');
 
-        // FIX: Wait for modal to be visible AND have layout dimensions
-        // before initializing the picker map. The IntersectionObserver crash
-        // happens when google.maps.Map is created on a zero-size element.
+        // STEP B: Wait for CSS transition to finish and element to have dimensions
+        // 300ms matches typical modal transition duration
         setTimeout(function () {
             var pickerEl = document.getElementById('picker-map');
-
-            // Guard: element must exist and have a rendered size
             if (!pickerEl) {
-                console.error('picker-map element not found');
-                return;
-            }
-            if (pickerEl.offsetWidth === 0 || pickerEl.offsetHeight === 0) {
-                console.warn('picker-map has no dimensions yet, retrying...');
-                setTimeout(function () { window.APP_MAP._initPickerMap(type); }, 200);
+                console.error('[openMapPicker] #picker-map element not found');
                 return;
             }
 
-            window.APP_MAP._initPickerMap(type);
-        }, 150);
-    },
+            // STEP C: Only initialize pickerMap if not already done
+            if (!pickerMap) {
+                var mapSettings = window.APP_MAP.getServiceMapSettings(window.APP.service);
+                pickerMap = new google.maps.Map(pickerEl, {
+                    center: mapSettings.center,
+                    zoom: mapSettings.zoom + 4,
+                    gestureHandling: 'greedy',
+                    disableDefaultUI: true,
+                    clickableIcons: false,
+                    zoomControl: true
+                });
+                window.APP.pickerMap = pickerMap;
 
-    // Separated so it can be retried cleanly
-    _initPickerMap: function (type) {
-        var pickerEl = document.getElementById('picker-map');
-        if (!pickerEl) return;
+                pickerMap.addListener('idle', function () {
+                    var center = pickerMap.getCenter();
+                    window.APP.picker.currentLocation = { lat: center.lat(), lng: center.lng() };
+                });
+            }
 
-        var mapSettings = window.APP_MAP.getServiceMapSettings(window.APP.service);
+            // STEP D: Always trigger resize after showing
+            google.maps.event.trigger(pickerMap, 'resize');
 
-        if (!pickerMap) {
-            pickerMap = new google.maps.Map(pickerEl, {
-                center: mapSettings.center,
-                zoom: mapSettings.zoom + 4,
-                gestureHandling: 'greedy',
-                disableDefaultUI: true,
-                clickableIcons: false,
-                zoomControl: true
-            });
-            window.APP.pickerMap = pickerMap;
+            // Center on existing place or user GPS
+            var field = type === 'origin' ? 'origin' : 'dest';
+            var existingPlace = window.APP.places[field];
+            var mapSettings = window.APP_MAP.getServiceMapSettings(window.APP.service);
 
-            pickerMap.addListener('idle', function () {
-                var center = pickerMap.getCenter();
-                window.APP.picker.currentLocation = { lat: center.lat(), lng: center.lng() };
-            });
-        }
-
-        // Trigger resize so tiles render correctly after modal animation
-        google.maps.event.trigger(pickerMap, 'resize');
-
-        // Center on existing place or user location
-        var field = type === 'origin' ? 'origin' : 'dest';
-        var existingPlace = window.APP.places[field];
-
-        if (existingPlace && existingPlace.geometry) {
-            var lat = existingPlace.geometry.location.lat();
-            var lng = existingPlace.geometry.location.lng();
-            window.APP.picker.currentLocation = { lat: lat, lng: lng };
-            pickerMap.setCenter({ lat: lat, lng: lng });
-            pickerMap.setZoom(18);
-        } else if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                function (pos) {
-                    var lat = pos.coords.latitude;
-                    var lng = pos.coords.longitude;
-                    window.APP.picker.currentLocation = { lat: lat, lng: lng };
-                    pickerMap.setCenter({ lat: lat, lng: lng });
-                    pickerMap.setZoom(18);
-                },
-                function () {
-                    window.APP.picker.currentLocation = mapSettings.center;
-                    pickerMap.setCenter(mapSettings.center);
-                    pickerMap.setZoom(mapSettings.zoom + 4);
-                }
-            );
-        } else {
-            window.APP.picker.currentLocation = mapSettings.center;
-            pickerMap.setCenter(mapSettings.center);
-            pickerMap.setZoom(mapSettings.zoom + 4);
-        }
+            if (existingPlace && existingPlace.geometry) {
+                var lat = existingPlace.geometry.location.lat();
+                var lng = existingPlace.geometry.location.lng();
+                window.APP.picker.currentLocation = { lat: lat, lng: lng };
+                pickerMap.setCenter({ lat: lat, lng: lng });
+                pickerMap.setZoom(18);
+            } else if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    function (pos) {
+                        var lat = pos.coords.latitude;
+                        var lng = pos.coords.longitude;
+                        window.APP.picker.currentLocation = { lat: lat, lng: lng };
+                        pickerMap.setCenter({ lat: lat, lng: lng });
+                        pickerMap.setZoom(18);
+                    },
+                    function () {
+                        window.APP.picker.currentLocation = mapSettings.center;
+                        pickerMap.setCenter(mapSettings.center);
+                        pickerMap.setZoom(mapSettings.zoom + 4);
+                    }
+                );
+            } else {
+                window.APP.picker.currentLocation = mapSettings.center;
+                pickerMap.setCenter(mapSettings.center);
+                pickerMap.setZoom(mapSettings.zoom + 4);
+            }
+        }, 300);
     },
 
     closeMapPicker: function () {
@@ -466,7 +432,6 @@ window.APP_MAP = {
             window.expandMap();
 
             if (window.APP.places.origin && window.APP.places.dest) window.APP_MAP.drawRoute();
-
             window.APP_MAP.closeMapPicker();
         });
     },
@@ -618,8 +583,8 @@ window.addEventListener('popstate', function (event) {
     }
 });
 
-// ─── 4. initMap — CALLED BY GOOGLE MAPS CALLBACK ─────────────────────────────
-// All `new google.maps.*` instantiation happens HERE, never at top level.
+// ─── 4. initMap — GOOGLE MAPS CALLBACK ───────────────────────────────────────
+// All `new google.maps.*` instantiation lives here. Never at top level.
 function initMap() {
     console.log('[initMap] Google Maps API ready.');
 
@@ -633,7 +598,7 @@ function initMap() {
             window.APP ? window.APP.service : 'RIDE'
         );
 
-        // ── Main map ──
+        // Main map
         map = new google.maps.Map(document.getElementById('map'), {
             center: mapSettings.center,
             zoom: mapSettings.zoom,
@@ -651,33 +616,29 @@ function initMap() {
         });
         window.APP.map = map;
 
-        // ── Directions ──
-        directionsService = new google.maps.DirectionsService();
-        directionsRenderer = new google.maps.DirectionsRenderer({
+        // Directions
+        ds = new google.maps.DirectionsService();
+        dr = new google.maps.DirectionsRenderer({
             suppressMarkers: true,
             preserveViewport: true,
-            polylineOptions: {
-                strokeColor: '#4285F4',
-                strokeWeight: 5,
-                strokeOpacity: 0.8
-            }
+            polylineOptions: { strokeColor: '#4285F4', strokeWeight: 5, strokeOpacity: 0.8 }
         });
-        directionsRenderer.setMap(map);
-        window.APP.directionsRenderer = directionsRenderer;
+        dr.setMap(map);
+        window.APP.directionsRenderer = dr;
 
-        // ── Geocoder ──
+        // Geocoder
         geocoder = new google.maps.Geocoder();
 
-        // ── Autocomplete — deferred one tick so Maps API internals settle ──
-        // This is the fix for "Cannot access 'Ea' before initialization".
+        // Autocomplete — deferred 500ms so Maps API internals fully settle
+        // This prevents "Cannot access 'Ea' before initialization"
         setTimeout(function () {
             window.APP_MAP.initAutocomplete();
-        }, 0);
+        }, 500);
 
-        // ── History chip ──
+        // History chip
         window.APP_MAP.checkHistory();
 
-        // ── Note textarea auto-resize ──
+        // Note textarea auto-resize
         var noteInput = document.getElementById('note');
         if (noteInput) {
             noteInput.addEventListener('input', function () {
@@ -687,7 +648,7 @@ function initMap() {
             });
         }
 
-        // ── Set initial service tab — safe call ──
+        // Set initial service tab — safe call
         if (window.setService) {
             window.setService('RIDE', document.querySelector('.tab'));
         } else if (window.APP && window.APP.setService) {
@@ -705,5 +666,5 @@ function initMap() {
     }
 }
 
-// ─── 5. EXPLICIT BINDING (must be at bottom, after function declaration) ──────
+// ─── 5. EXPLICIT BINDING ─────────────────────────────────────────────────────
 window.initMap = initMap;
