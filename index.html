@@ -285,7 +285,7 @@
                 </div>
             </div>
 
-            <button id="order-cancel-btn" onclick="cancelActiveOrder()" class="btn-secondary"
+            <button id="order-cancel-btn" onclick="openCancelConfirmModal()" class="btn-secondary"
                 style="width:100%; color:#EF4444; border-color:#FECACA; background:#FEF2F2;">
                 Batalkan Order
             </button>
@@ -341,11 +341,26 @@
             </button>
 
             <!-- DEV ONLY -->
-            <button id="btn-simulate-pay" class="btn-secondary" 
-                style="width:100%; margin-top:12px; border-color:#dbeafe; background:#eff6ff; color:#2563eb; display:none;" 
+            <button id="btn-simulate-pay" class="btn-secondary"
+                style="width:100%; margin-top:12px; border-color:#dbeafe; background:#eff6ff; color:#2563eb; display:none;"
                 onclick="simulatePaymentDev()">
                 🧪 Simulasi Bayar (Dev)
             </button>
+        </div>
+    </div>
+
+    <!-- Cancel Confirmation Modal -->
+    <div id="modal-cancel-confirm" class="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-content">
+            <h3 style="margin-top:0;">Batalkan Order?</h3>
+            <p style="color:#64748B; font-size:14px; margin-bottom:24px;">Yakin mau batalin pesanan ini? Driver mungkin
+                sudah dalam perjalanan.</p>
+            <div class="confirm-actions" style="display:flex; gap:12px;">
+                <button class="btn-secondary" style="flex:1;" onclick="closeCancelConfirmModal()">Nggak Jadi</button>
+                <button class="btn-primary" style="flex:1; background:#EF4444; border-color:#EF4444;"
+                    onclick="confirmCancelOrder()">Ya, Batalkan</button>
+            </div>
         </div>
     </div>
 

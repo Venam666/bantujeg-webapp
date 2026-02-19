@@ -76,6 +76,7 @@ window.APP = {
             backdrop.addEventListener('click', function () {
                 window.APP.closeConfirmModal();
                 window.APP.closeQrisModal();
+                window.APP.closeCancelConfirmModal();
                 // Do NOT close active order card (it's persistent)
             });
         }
@@ -394,7 +395,31 @@ window.APP = {
                 await window.APP.fetchActiveOrder();
             }
             if (cancelBtn) { cancelBtn.disabled = false; cancelBtn.innerText = 'Batalkan Order'; }
+            window.APP.closeCancelConfirmModal();
         }
+    },
+
+    openCancelConfirmModal: function () {
+        var modal = document.getElementById('modal-cancel-confirm');
+        var backdrop = document.getElementById('modal-backdrop');
+        if (modal) modal.classList.add('active');
+        if (backdrop) backdrop.classList.add('active');
+    },
+
+    closeCancelConfirmModal: function () {
+        var modal = document.getElementById('modal-cancel-confirm');
+        var backdrop = document.getElementById('modal-backdrop');
+        if (modal) modal.classList.remove('active');
+        // Only hide backdrop if no other modals are active (checking blindly here effectively hides it, which is desired behavior for simple stack)
+        // But to be safe, we essentially just remove active class. 
+        // Logic detail: if other modals are open, this might hide backdrop for them? 
+        // Existing logic in closeQrisModal simply removes it. So we follow pattern.
+        if (backdrop) backdrop.classList.remove('active');
+    },
+
+    confirmCancelOrder: function () {
+        window.APP.closeCancelConfirmModal();
+        window.APP.cancelActiveOrder();
     },
 
     // ─── SUBMIT FLOW ─────────────────────────────────────────────────────────
@@ -770,6 +795,9 @@ window.closeQrisModal = function () { window.APP.closeQrisModal(); };
 window.openQrisModal = function (o) { window.APP.openQrisModal(o); };
 window.cancelActiveOrder = function () { window.APP.cancelActiveOrder(); };
 window.cancelQrisPayment = function () { window.APP.cancelQrisPayment(); };
+window.openCancelConfirmModal = function () { window.APP.openCancelConfirmModal(); };
+window.closeCancelConfirmModal = function () { window.APP.closeCancelConfirmModal(); };
+window.confirmCancelOrder = function () { window.APP.confirmCancelOrder(); };
 window.finishQrisPayment = async function () {
     if (window.showToast) window.showToast('⏳ Mengecek pembayaran...');
     await window.APP.fetchActiveOrder();
