@@ -48,7 +48,9 @@ window.APP = {
     _qrisCountdownTimer: null,
     _isFetchingOrder: false,
     _pollingTimer: null,
-    _pollingInterval: 5000,
+    _isFetchingOrder: false,
+    _pollingTimer: null,
+    _pollingInterval: 7000,
 
     // ─── STARTUP ─────────────────────────────────────────────────────────────
     // initApp runs on DOMContentLoaded — before the Google Maps SDK has loaded.
@@ -145,10 +147,20 @@ window.APP = {
                 headers: window.APP_AUTH.getAuthHeaders()
             });
 
+            if (res.status === 429) {
+                console.warn('[ORDERS] 429 rate limited. Skipping this tick.');
+                return;
+            }
+
             if (res.status === 401 || res.status === 403) {
                 console.warn('[ORDERS] 401 on /orders/active. Session expired — stopping polling.');
                 localStorage.removeItem('bj_token');
                 window.APP.stopPolling();
+                return;
+            }
+
+            if (!res.ok) {
+                console.warn('[ORDERS] Non-OK response:', res.status);
                 return;
             }
 
@@ -239,12 +251,13 @@ window.APP = {
 
     // ─── POLLING ─────────────────────────────────────────────────────────────
     startPolling: function () {
-        window.APP.stopPolling();
-        window.APP._pollingTimer = setInterval(async function () {
-            if (!window.APP.activeOrder) { window.APP.stopPolling(); return; }
-            if (document.hidden) return;
-            await window.APP.fetchActiveOrder();
-        }, window.APP._pollingInterval);
+        if (!window.APP._pollingTimer) {
+            window.APP._pollingTimer = setInterval(async function () {
+                if (!window.APP.activeOrder) { window.APP.stopPolling(); return; }
+                if (document.hidden) return;
+                await window.APP.fetchActiveOrder();
+            }, window.APP._pollingInterval);
+        }
     },
 
     stopPolling: function () {
@@ -334,6 +347,13 @@ window.APP = {
                 headers: Object.assign({ 'Content-Type': 'application/json' }, window.APP_AUTH.getAuthHeaders()),
                 body: JSON.stringify({ orderId: orderId, reason: 'Customer cancel' })
             });
+
+            if (res.status === 429) {
+                console.warn('Cancel rate-limited');
+                if (window.showToast) window.showToast('Terlalu banyak request, tunggu sebentar.');
+                return;
+            }
+
             var data = await res.json();
             if (data && (data.success || data.idempotent)) {
                 if (window.showToast) window.showToast('Order dibatalkan.');
@@ -343,7 +363,13 @@ window.APP = {
         } catch (e) {
             if (window.showToast) window.showToast('Gagal membatalkan: ' + e.message);
         } finally {
-            await window.APP.fetchActiveOrder();
+            if (window.APP._pollingTimer) {
+                setTimeout(function () {
+                    window.APP.fetchActiveOrder();
+                }, 1200);
+            } else {
+                await window.APP.fetchActiveOrder();
+            }
             if (cancelBtn) { cancelBtn.disabled = false; cancelBtn.innerText = 'Batalkan Order'; }
         }
     },
@@ -649,8 +675,8 @@ window.APP = {
     },
 
     cancelQrisPayment: function () {
-        window.APP.cancelActiveOrder();
         window.APP.closeQrisModal();
+        window.APP.cancelActiveOrder();
     }
 };
 
@@ -685,7 +711,7 @@ window.finishQrisPayment = async function () {
 
 // Page Visibility — immediately sync when tab becomes visible again
 document.addEventListener('visibilitychange', function () {
-    if (!document.hidden && window.APP.activeOrder) {
+    if (!document.hidden && window.APP.activeOrder && !window.APP._isFetchingOrder) {
         window.APP.fetchActiveOrder();
     }
 });
