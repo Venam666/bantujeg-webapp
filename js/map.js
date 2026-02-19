@@ -149,7 +149,6 @@ window.APP_MAP = {
         window.APP_MAP.setLoading(true);
         document.getElementById('error-card').style.display = 'none';
 
-        var serviceKey = window.APP.service || 'RIDE'; // Fail-safe default
         var isCar = (serviceKey === 'CAR' || serviceKey === 'CAR_XL');
         var travelMode = isCar
             ? google.maps.TravelMode.DRIVING
@@ -162,22 +161,45 @@ window.APP_MAP = {
             return;
         }
 
-        ds.route({
+        // AUDIT: Step 1 - Trace Service Flow & Request Object
+        console.log('[AUDIT] 1. SERVICE KEY:', serviceKey);
+        console.log('[AUDIT] 2. TRAVEL MODE SENT:', travelMode);
+
+        var requestObj = {
             origin: origin.geometry.location,
             destination: dest.geometry.location,
             travelMode: travelMode,
             avoidTolls: !window.APP.carOptions.toll,
-            provideRouteAlternatives: true // ✅ Request alternatives
-        }, function (result, status) {
+            provideRouteAlternatives: true
+        };
+        console.log('[AUDIT] 3. FULL REQUEST:', requestObj);
+
+        ds.route(requestObj, function (result, status) {
             window.APP_MAP.setLoading(false);
 
             if (status !== google.maps.DirectionsStatus.OK) {
+                // ... handle error ...
+                console.error('[AUDIT] Routing failed with status:', status);
+
                 window.APP_MAP.showError('Waduh, rute tidak ditemukan. Coba geser titiknya dikit ya Kak! 🗺️');
                 window.APP.calc.price = 0;
                 window.APP.calc.withinLimit = false;
                 document.getElementById('price-card').style.display = 'none';
                 window.updateLink();
                 return;
+            }
+
+            // AUDIT: Step 3 - Validate Google Response
+            console.log('[AUDIT] 4. RESULT.REQUEST:', result.request);
+            console.log('[AUDIT] 5. RESULT.REQUEST.travelMode:', result.request ? result.request.travelMode : 'UNDEFINED');
+
+            // AUDIT: Step 4 - Region Fallback Detection
+            if (travelMode === google.maps.TravelMode.TWO_WHEELER &&
+                result.request &&
+                result.request.travelMode === google.maps.TravelMode.DRIVING) {
+                console.warn('[AUDIT] ⚠️ GOOGLE FALLBACK DETECTED: Requested TWO_WHEELER but got DRIVING');
+            } else {
+                console.log('[AUDIT] ✅ Travel Mode Consistent');
             }
 
             // ✅ Find SHORTEST route index among alternatives
