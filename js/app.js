@@ -155,10 +155,7 @@ window.APP = {
 
             var res = await fetch(url, {
                 method: 'GET',
-                headers: Object.assign({}, window.APP_AUTH.getAuthHeaders(), {
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache'
-                }),
+                headers: window.APP_AUTH.getAuthHeaders(),
                 cache: 'no-store'
             });
 
