@@ -458,15 +458,20 @@ window.APP = {
 
         try {
             var apiUrl = (window.API_URL || 'http://localhost:3000');
+            // Build preview payload — include vehicle_variant for CAR seat mapping
+            var previewBody = {
+                service: window.APP.service,
+                pickupLocation: pickupLocation,
+                dropoffLocation: dropoffLocation,
+                distanceKm: distanceKm
+            };
+            if (window.APP.service === 'CAR' || window.APP.service === 'CAR_XL') {
+                previewBody.vehicle_variant = window.APP.carOptions.seats || 4;
+            }
             var res = await fetch(apiUrl + '/pricing/preview', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    service: window.APP.service,
-                    pickupLocation: pickupLocation,
-                    dropoffLocation: dropoffLocation,
-                    distanceKm: distanceKm
-                })
+                body: JSON.stringify(previewBody)
             });
 
             // Handle specific backend errors
@@ -559,8 +564,9 @@ window.APP = {
             if (window.APP.service === 'RIDE') { displayService = 'Ojek Motor'; }
             if (window.APP.service === 'SEND') { displayService = 'Kirim Barang'; }
             if (window.APP.service === 'FOOD_MART') { displayService = 'Food & Mart'; }
-            if (window.APP.service === 'CAR') { displayService = 'Mobil (4 Seat)'; }
-            if (window.APP.service === 'CAR_XL') { displayService = 'Mobil XL (6 Seat)'; }
+            if (window.APP.service === 'CAR' || window.APP.service === 'CAR_XL') {
+                displayService = window.APP.carOptions.seats === 6 ? 'Mobil (6 Seat)' : 'Mobil (4 Seat)';
+            }
 
             btn.classList.remove('disabled');
             btnText.innerText = 'Pesan ' + displayService + ' →';
@@ -569,8 +575,9 @@ window.APP = {
 
     // ─── API HELPERS ─────────────────────────────────────────────────────────
     _buildPayload: function () {
-        return {
-            service: window.APP.service,
+        var svc = window.APP.service;
+        var payload = {
+            service: (svc === 'CAR_XL') ? 'CAR' : svc, // Always send CAR; backend uses vehicle_variant
             customer_phone: localStorage.getItem('bj_phone') || '',
             session_key: localStorage.getItem('bj_token') || '',  // W-P1: enables session-based order lookup
             source: 'webapp',                                       // W-P1: identifies origin
@@ -588,6 +595,11 @@ window.APP = {
             items: document.getElementById('items') ? document.getElementById('items').value : '',
             estPrice: document.getElementById('est-price') ? document.getElementById('est-price').value : ''
         };
+        // CAR service: include vehicle_variant for seat-based pricing
+        if (svc === 'CAR' || svc === 'CAR_XL') {
+            payload.vehicle_variant = window.APP.carOptions.seats || 4;
+        }
+        return payload;
     },
 
     createQrisOrder: async function () {

@@ -165,9 +165,12 @@ window.APP_MAP = {
                 });
             }
 
-            // Set directions SETELAH sort, pakai routeIndex 0 (terpendek)
-            dr.setDirections(result);
-            dr.setRouteIndex(0);
+            // ✅ Render ONLY the shortest route — strip alternatives
+            var shortestOnly = {
+                geocoded_waypoints: result.geocoded_waypoints,
+                routes: [result.routes[0]]
+            };
+            dr.setDirections(shortestOnly);
             console.log('[ROUTE] Alternatif tersedia:', result.routes.length,
                 '| Dipilih: rute terpendek =', result.routes[0].legs[0].distance.value, 'm');
 
@@ -591,7 +594,7 @@ function initMap() {
 
         ds = new google.maps.DirectionsService();
         dr = new google.maps.DirectionsRenderer({
-            suppressMarkers: true,
+            suppressMarkers: false,
             preserveViewport: true,
             polylineOptions: { strokeColor: '#4285F4', strokeWeight: 5 }
         });
