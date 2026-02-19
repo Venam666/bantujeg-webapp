@@ -129,13 +129,12 @@ window.APP = {
         window.APP._isFetchingOrder = true;
         try {
             var res = await fetch((window.API_URL || 'http://localhost:3000') + '/orders/active', {
-                credentials: 'include'
+                headers: window.APP_AUTH.getAuthHeaders()
             });
 
             if (res.status === 401 || res.status === 403) {
-                // Session expired — stop polling. auth.js handles session refresh.
-                // Never call silentRefresh() from here — it would fire on every poll cycle.
-                console.warn('[ORDERS] 401 on /orders/active. Sesi expired — menghentikan polling.');
+                // Session expired — stop polling. auth.js handles session on next page load.
+                console.warn('[ORDERS] 401 on /orders/active. Session expired — stopping polling.');
                 localStorage.removeItem('bj_token');
                 window.APP.stopPolling();
                 return;
@@ -339,8 +338,7 @@ window.APP = {
             var apiUrl = (window.API_URL || 'http://localhost:3000');
             var res = await fetch(apiUrl + '/orders/cancel', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
+                headers: Object.assign({ 'Content-Type': 'application/json' }, window.APP_AUTH.getAuthHeaders()),
                 body: JSON.stringify({
                     orderId: orderId,
                     reason: 'Customer cancel'
@@ -618,8 +616,7 @@ window.APP = {
         var apiUrl = (window.API_URL || 'http://localhost:3000');
         var res = await fetch(apiUrl + endpoint, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
+            headers: Object.assign({ 'Content-Type': 'application/json' }, window.APP_AUTH.getAuthHeaders()),
             body: JSON.stringify(payload)
         });
 

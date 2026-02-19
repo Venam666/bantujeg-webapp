@@ -1,8 +1,7 @@
 /* ========================
-   auth.js - Identity Layer
-   Rule: User stays logged in forever.
-   Only explicit logout() shows the login screen.
-   401 from backend triggers silent refresh, not logout.
+   auth.js - Identity Layer (Bearer Token)
+   Rule: User stays logged in until token expires or explicit logout.
+   401 from backend → show login screen. No automatic re-login.
    ======================== */
 
 // 1. Global API Configuration
@@ -10,10 +9,18 @@ window.API_URL = window.location.hostname === 'localhost' || window.location.hos
     ? 'http://localhost:3000'
     : 'https://tanganbantu-backend-422725955268.asia-southeast2.run.app';
 
+console.log('[AUTH] Using Bearer session system');
 console.log('[AUTH] API URL:', window.API_URL);
 
 // 2. Define Namespace
 window.APP_AUTH = {
+
+    // --- Auth header helper (used by auth.js and app.js) ---
+    getAuthHeaders: function () {
+        var token = localStorage.getItem('bj_token');
+        if (!token) return {};
+        return { 'Authorization': 'Bearer ' + token };
+    },
 
     // --- View toggling helpers ---
     showLogin: function () {
@@ -37,19 +44,26 @@ window.APP_AUTH = {
         }, 100);
     },
 
-    // --- Clear identity (only on explicit logout or 401) ---
+    // --- Clear identity (logout or expired session) ---
     clearIdentity: function () {
-        // Token is now an HttpOnly cookie — only backend can clear it
-        // bj_phone is not sensitive auth data, keep it for display purposes
+        localStorage.removeItem('bj_token');
         localStorage.removeItem('bj_phone');
+        localStorage.removeItem('bj_session_expire');
     },
 
-    // --- Silent session validation via GET /auth/me ---
-    // NEVER shows login or clears identity. Only refreshes stored phone + expireAt.
+    // --- Session validation via GET /auth/me ---
     validateSession: async function () {
         try {
+            var headers = window.APP_AUTH.getAuthHeaders();
+
+            // No token in localStorage → skip request entirely
+            if (!headers['Authorization']) {
+                console.log('[AUTH] No token in localStorage. Skipping /auth/me.');
+                return false;
+            }
+
             var res = await fetch(window.API_URL + '/auth/me', {
-                credentials: 'include'
+                headers: headers
             });
 
             if (res.ok) {
@@ -57,7 +71,6 @@ window.APP_AUTH = {
                 if (data && data.phone) {
                     localStorage.setItem('bj_phone', data.phone);
                 }
-                // Change 4: store expireAt for future proactive renewal
                 if (data && data.expireAt) {
                     localStorage.setItem('bj_session_expire', String(data.expireAt));
                 }
@@ -66,72 +79,19 @@ window.APP_AUTH = {
             }
 
             if (res.status === 401) {
-                // Token invalid or expired.
-                // DO NOT silentRefresh automatically -> causes infinite loop if cookie is rejected.
-                console.warn('[AUTH] Session invalid (401). clearing identity & showing login.');
-
-                // Clear local state
-                localStorage.removeItem('bj_phone');
-                localStorage.removeItem('bj_session_expire');
-
-                // Show login screen
+                console.warn('[AUTH] Session invalid (401). Showing login.');
+                window.APP_AUTH.clearIdentity();
                 window.APP_AUTH.showLogin();
                 return false;
             }
 
-            // Any other error (500, etc.) — do nothing.
+            // Any other error (500, etc.)
             console.warn('[AUTH] /auth/me returned', res.status, '— unexpected error.');
             return false;
         } catch (e) {
             // Network error — do NOT clear session, do NOT show login.
             console.warn('[AUTH] /auth/me unreachable. Staying on current screen.', e.message);
             return false;
-        }
-    },
-
-    // Change 2: Silent refresh — sends new magic link WITHOUT showing login screen.
-    // Triggered when session is expired/wiped from Firestore.
-    silentRefresh: async function () {
-        // ── RATE-LIMIT GUARD ──────────────────────────────────────────────
-        var COOLDOWN_MS = 10 * 60 * 1000; // 10 menit
-        var lastRefresh = parseInt(localStorage.getItem('bj_last_refresh') || '0', 10);
-        var now = Date.now();
-        if (now - lastRefresh < COOLDOWN_MS) {
-            console.log('[AUTH] silentRefresh skipped — cooldown aktif (' +
-                Math.round((COOLDOWN_MS - (now - lastRefresh)) / 1000) + 's lagi)');
-            return;
-        }
-        localStorage.setItem('bj_last_refresh', String(now));
-        // ── END GUARD ─────────────────────────────────────────────────────
-
-        var phone = localStorage.getItem('bj_phone');
-
-        // If no phone stored, this is a truly new device — show login (first time only).
-        if (!phone) {
-            console.warn('[AUTH] silentRefresh: no phone stored. First-time device. Showing login.');
-            window.APP_AUTH.showLogin();
-            return;
-        }
-
-        // Phone is known. Request a fresh magic link to their WhatsApp.
-        // DO NOT show the login screen. User stays in the app.
-        try {
-            var res = await fetch(window.API_URL + '/auth/request-login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phone: phone })
-            });
-            if (res.ok) {
-                console.log('[AUTH] silentRefresh: new magic link sent to', phone.slice(0, 5) + '***');
-                if (window.showToast) {
-                    window.showToast('Sesi kamu habis. Link masuk baru sudah dikirim ke WhatsApp kamu 📲', 7000);
-                }
-            } else {
-                console.warn('[AUTH] silentRefresh: request-login failed with status', res.status);
-            }
-        } catch (e) {
-            // Network error — do nothing. User stays on current screen.
-            console.warn('[AUTH] silentRefresh: network error', e.message);
         }
     },
 
@@ -146,7 +106,6 @@ window.APP_AUTH = {
             fetch(window.API_URL + '/auth/verify', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                credentials: 'include', // P1: backend sets HttpOnly cookie in response
                 body: JSON.stringify({ token: token })
             })
                 .then(function (res) {
@@ -160,13 +119,19 @@ window.APP_AUTH = {
                 })
                 .then(function (data) {
                     if (data && data.success) {
+                        // Store Bearer session token in localStorage
+                        if (data.sessionToken) {
+                            localStorage.setItem('bj_token', data.sessionToken);
+                            console.log('[AUTH] Session token stored in localStorage.');
+                        }
+
                         var phone = (data.customer && data.customer.phone) || data.phone || '';
                         if (phone) localStorage.setItem('bj_phone', phone);
 
                         // Clean URL — remove ?token= from address bar
                         history.replaceState({}, document.title, window.location.pathname);
 
-                        console.log('[AUTH] Magic link verified. Cookie set by backend.');
+                        console.log('[AUTH] Magic link verified. Bearer token stored.');
                         window.APP_AUTH.showMain();
                     } else {
                         console.warn('[AUTH] Verification logic failed:', data);
@@ -184,44 +149,20 @@ window.APP_AUTH = {
             return; // Wait for async verify
         }
 
-        // CASE 2: No magic link in URL.
-        // Check if we have a stored phone (returning user) or not (first-time user).
-        var storedPhone = localStorage.getItem('bj_phone');
+        // CASE 2: No magic link in URL — check localStorage for token.
+        var storedToken = localStorage.getItem('bj_token');
 
-        if (storedPhone) {
-            // Returning user — show main immediately (optimistic), validate in background.
-            // Change 3: NEVER show login on 401 — silentRefresh handles that.
-            console.log('[AUTH] Returning user detected. Showing app immediately.');
+        if (storedToken) {
+            // Token exists — show main immediately (optimistic), validate in background.
+            console.log('[AUTH] Stored token found. Showing app immediately.');
             window.APP_AUTH.showMain();
-            window.APP_AUTH.validateSession(); // background — never shows login
+            window.APP_AUTH.validateSession(); // background — shows login on 401
             return;
         }
 
-        // CASE 3: Truly first-time user — no phone, no session.
-        // Show loading spinner while checking cookie session.
-        var loginView = document.getElementById('view-login');
-        var mainView = document.getElementById('view-main');
-        if (loginView) loginView.style.display = 'none';
-        if (mainView) mainView.style.display = 'none';
-
-        var loadingEl = document.getElementById('auth-loading');
-        if (loadingEl) loadingEl.style.display = 'flex';
-
-        // Try cookie session first — if it works, show main. Otherwise show login.
-        window.APP_AUTH.validateSession().then(function (valid) {
-            if (loadingEl) loadingEl.style.display = 'none';
-            if (valid) {
-                // Cookie session is valid — show main
-                window.APP_AUTH.showMain();
-            } else {
-                // No valid session — truly new user.
-                console.log('[AUTH] No session found. Showing login.');
-                window.APP_AUTH.showLogin();
-            }
-        }).catch(function () {
-            if (loadingEl) loadingEl.style.display = 'none';
-            window.APP_AUTH.showLogin();
-        });
+        // CASE 3: No token at all — first-time user. Show login directly.
+        console.log('[AUTH] No session found. Showing login.');
+        window.APP_AUTH.showLogin();
     },
 
     // --- Request login (send magic link) ---
@@ -279,8 +220,9 @@ window.APP_AUTH = {
 
     // --- Logout: only explicit user action ---
     logout: function () {
-        // P1: Call backend to clear the HttpOnly cookie server-side
-        fetch(window.API_URL + '/auth/logout', { method: 'POST', credentials: 'include' })
+        // Notify backend (best-effort, for future server-side session invalidation)
+        var headers = window.APP_AUTH.getAuthHeaders();
+        fetch(window.API_URL + '/auth/logout', { method: 'POST', headers: headers })
             .catch(function (e) { console.warn('[AUTH] Logout endpoint error:', e.message); });
         window.APP_AUTH.clearIdentity();
         window.APP_AUTH.showLogin();
