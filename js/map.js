@@ -1,26 +1,40 @@
 /* ========================
-   map.js - The Maps Cables
+   map.js - Deterministic Routing Engine
+   Refactor: single init path, request-ID guard, no silent travelMode fallback.
    ======================== */
 
 // ─── 0. CONSTANTS ────────────────────────────────────────────────────────────
-// Java island bounding box — map never shows outside this
 var JAVA_BOUNDS = {
     south: -9.5, west: 104.5,
     north: -5.0, east: 115.5
 };
 
-// P3: Debounce state for drawRoute — prevents multiple concurrent DirectionsService calls
-var _drawRouteTimer = null;
-var _drawRouteDelay = 600; // ms
-
-// ─── 1. TOP-LEVEL DECLARATIONS ONLY ─────────────────────────────────────────
+// ─── 1. MODULE STATE ─────────────────────────────────────────────────────────
 var map = null;
 var ds = null;
 var dr = null;
 var geocoder = null;
 var pickerMap = null;
 
-// ─── 2. APP_MAP NAMESPACE ────────────────────────────────────────────────────
+// Request-ID guard — only the most recent ds.route() call may commit to dr.
+var _currentRouteRequestId = 0;
+
+// Single debounce timer for the unified triggerRoute() function.
+var _routeTimer = null;
+var _routeDelay = 600; // ms
+
+// ─── 2. INTERNAL: UNIFIED ROUTE TRIGGER ──────────────────────────────────────
+// ALL route draw requests funnel through here — no exceptions.
+// Debounces rapid calls and cancels in-flight stale requests via request-ID.
+function triggerRoute() {
+    if (_routeTimer) clearTimeout(_routeTimer);
+    _routeTimer = setTimeout(function () {
+        _routeTimer = null;
+        window.APP_MAP.drawRoute();
+    }, _routeDelay);
+}
+
+// ─── 3. APP_MAP NAMESPACE ────────────────────────────────────────────────────
 window.APP_MAP = {
 
     getServiceMapSettings: function (service) {
@@ -92,7 +106,7 @@ window.APP_MAP = {
         var field = type === 'origin' ? 'pickup' : 'dropoff';
         window.APP_MAP.updateLocationState(field, place.geometry.location.lat(), place.geometry.location.lng(), 'autocomplete', cleaned);
         window.APP_MAP.updateMarker(type, place.geometry.location.lat(), place.geometry.location.lng());
-        window.debouncedDrawRoute(); // P3: debounced
+        triggerRoute();
     },
 
     updateMarker: function (type, lat, lng) {
@@ -123,52 +137,64 @@ window.APP_MAP = {
     },
 
     // ─── ROUTING ─────────────────────────────────────────────────────────────
-    // ─── ROUTING ─────────────────────────────────────────────────────────────
     drawRoute: function () {
         if (!map || !ds || !dr) return;
 
-        // GUARD: Ensure Google Maps API is fully loaded
         if (!google || !google.maps || !google.maps.TravelMode) {
-            console.error('[MAP] Google Maps API not ready or missing TravelMode');
+            console.error('[MAP] Google Maps API not ready');
             return;
         }
 
         var origin = window.APP.places.origin;
         var dest = window.APP.places.dest;
 
-        // GUARD: Strict check for place geometry
-        if (!origin || !origin.geometry || !origin.geometry.location) {
-            // invalid origin, just return silently or log debug
-            return;
-        }
-        if (!dest || !dest.geometry || !dest.geometry.location) {
-            // invalid dest, wait for user
-            return;
-        }
+        if (!origin || !origin.geometry || !origin.geometry.location) return;
+        if (!dest || !dest.geometry || !dest.geometry.location) return;
 
         window.APP_MAP.setLoading(true);
         document.getElementById('error-card').style.display = 'none';
 
-        var serviceKey = window.APP.service || 'RIDE'; // Fail-safe default
+        var serviceKey = window.APP.service || 'RIDE';
         var isCar = (serviceKey === 'CAR' || serviceKey === 'CAR_XL');
-        var travelMode = isCar
-            ? google.maps.TravelMode.DRIVING
-            : (google.maps.TravelMode.TWO_WHEELER || google.maps.TravelMode.DRIVING);
 
-        // GUARD: Ensure travelMode is valid
-        if (!travelMode) {
-            console.error('[MAP] Invalid TravelMode for service:', serviceKey);
-            window.APP_MAP.setLoading(false);
-            return;
+        // ── DETERMINISTIC TRAVEL MODE ─────────────────────────────────────────
+        // TWO_WHEELER requires &v=beta SDK and is region-dependent.
+        // Check availability explicitly — no silent || fallback.
+        // If unavailable, log a visible warning and fall to DRIVING.
+        // Pricing is always backend-authoritative and unaffected by this choice.
+        var travelMode;
+        if (isCar) {
+            travelMode = google.maps.TravelMode.DRIVING;
+        } else if (google.maps.TravelMode.TWO_WHEELER) {
+            travelMode = google.maps.TravelMode.TWO_WHEELER;
+        } else {
+            console.warn('[MAP] TWO_WHEELER unavailable in this SDK region. Using DRIVING for route geometry. Pricing remains backend-authoritative.');
+            travelMode = google.maps.TravelMode.DRIVING;
         }
+        // ─────────────────────────────────────────────────────────────────────
+
+        // Stamp this request. Any earlier in-flight call with a stale ID
+        // will see requestId !== _currentRouteRequestId and discard its result.
+        var requestId = ++_currentRouteRequestId;
 
         ds.route({
             origin: origin.geometry.location,
             destination: dest.geometry.location,
             travelMode: travelMode,
             avoidTolls: !window.APP.carOptions.toll,
-            provideRouteAlternatives: true // ✅ Request alternatives
+            provideRouteAlternatives: true
         }, function (result, status) {
+
+            // ── REQUEST-ID GUARD ──────────────────────────────────────────────
+            // If a newer request was issued while this one was in flight,
+            // discard this result. Prevents renderer overwrite by stale calls.
+            if (requestId !== _currentRouteRequestId) {
+                console.log('[MAP] Stale route result discarded (id=' + requestId + ', current=' + _currentRouteRequestId + ')');
+                window.APP_MAP.setLoading(false);
+                return;
+            }
+            // ─────────────────────────────────────────────────────────────────
+
             window.APP_MAP.setLoading(false);
 
             if (status !== google.maps.DirectionsStatus.OK) {
@@ -180,28 +206,22 @@ window.APP_MAP = {
                 return;
             }
 
-            // ✅ Find SHORTEST route index among alternatives
+            // Select SHORTEST route among alternatives
             var shortestIndex = 0;
             var shortestDist = Infinity;
-
             if (result.routes && result.routes.length > 0) {
                 for (var i = 0; i < result.routes.length; i++) {
-                    var dist = result.routes[i].legs.reduce(function (sum, leg) { return sum + leg.distance.value; }, 0);
-                    if (dist < shortestDist) {
-                        shortestDist = dist;
-                        shortestIndex = i;
-                    }
+                    var dist = result.routes[i].legs.reduce(function (sum, leg) {
+                        return sum + leg.distance.value;
+                    }, 0);
+                    if (dist < shortestDist) { shortestDist = dist; shortestIndex = i; }
                 }
             }
 
-            // ✅ Render the original result directly (Prevents 'travelMode' crash)
             dr.setDirections(result);
-
-            // ✅ Set the index of the shortest route
             dr.setRouteIndex(shortestIndex);
 
-            console.log('[ROUTE] Alternatif tersedia:', result.routes.length,
-                '| Dipilih: route index', shortestIndex, '=', shortestDist, 'm');
+            console.log('[ROUTE] travelMode=' + travelMode + ' | alternatives=' + result.routes.length + ' | selected #' + shortestIndex + ' = ' + shortestDist + 'm');
 
             if (result.routes[shortestIndex] && result.routes[shortestIndex].bounds) {
                 map.fitBounds(result.routes[shortestIndex].bounds, { padding: 60 });
@@ -211,21 +231,17 @@ window.APP_MAP = {
             var distanceKm = leg.distance.value / 1000;
             var durationMins = Math.ceil(leg.duration.value / 60);
 
-            // ─── DISTANCE DEBUG (instrumentation only — no logic change) ──────
-            window.APP._distanceDebug = {
-                rawMeters: leg.distance.value,
-                frontendKm: distanceKm
-            };
-            console.log('[DISTANCE DEBUG] Google Directions raw:', leg.distance.value, 'm →', distanceKm.toFixed(3), 'km');
+            window.APP._distanceDebug = { rawMeters: leg.distance.value, frontendKm: distanceKm };
+            console.log('[DISTANCE] Google Directions:', leg.distance.value, 'm →', distanceKm.toFixed(3), 'km');
 
-            // ─── SECTION 5: MAX DISTANCE ENFORCEMENT (P2: use backend config) ──
+            // Max distance enforcement (uses backend config if available, else conservative default)
             var _pricingCfg = window.APP.getPricingConfig(serviceKey);
             var maxKm = (_pricingCfg && _pricingCfg.constraints && _pricingCfg.constraints.max_distance_km)
-                ? _pricingCfg.constraints.max_distance_km
-                : 25; // conservative fallback (matches backend default)
+                ? _pricingCfg.constraints.max_distance_km : 25;
             var _maxDistMsg = (_pricingCfg && _pricingCfg.constraints && _pricingCfg.constraints.max_distance_error_msg)
                 ? _pricingCfg.constraints.max_distance_error_msg
                 : 'Jarak melebihi batas layanan (' + maxKm + 'km untuk ' + serviceKey + ')';
+
             if (distanceKm > maxKm) {
                 window.APP.calc.price = 0;
                 window.APP.calc.withinLimit = false;
@@ -238,16 +254,15 @@ window.APP_MAP = {
                 return;
             }
 
-            window.APP.calc.withinLimit = true;
             window.APP.calc = {
                 distance: parseFloat(distanceKm.toFixed(2)),
                 duration: durationMins,
-                price: 0,           // reset — backend will set this
+                price: 0,
                 withinLimit: true
             };
             document.getElementById('dist-display').innerText = distanceKm.toFixed(1) + ' km (' + durationMins + ' mnt)';
 
-            // ─── SECTION 1: BACKEND IS SOLE PRICING AUTHORITY ────────────────
+            // Backend pricing authority — unchanged from original
             var pickup = window.APP.state.pickup;
             var dropoff = window.APP.state.dropoff;
 
@@ -258,7 +273,6 @@ window.APP_MAP = {
                     distanceKm
                 ).then(function (backendPrice) {
                     if (!backendPrice) {
-                        // ─── SECTION 2: NO ESTIMASI — just hide and toast ────
                         console.warn('[PRICING] Backend preview failed. Submit disabled.');
                         window.APP.calc.price = 0;
                         document.getElementById('price-card').style.display = 'none';
@@ -270,7 +284,6 @@ window.APP_MAP = {
                     }
                 });
             } else {
-                // No coords yet — keep price card hidden, submit disabled
                 window.APP.calc.price = 0;
                 document.getElementById('price-card').style.display = 'none';
                 window.updateLink();
@@ -300,7 +313,7 @@ window.APP_MAP = {
     },
 
     checkHistory: function () {
-        var stored = sessionStorage.getItem('bantujeg_history'); // P8: sessionStorage for privacy
+        var stored = sessionStorage.getItem('bantujeg_history');
         if (!stored) return;
         try {
             var data = JSON.parse(stored);
@@ -343,12 +356,12 @@ window.APP_MAP = {
         window.APP_MAP.updateMarker('origin', data.origin_lat, data.origin_lng);
         window.APP_MAP.updateMarker('dest', data.dest_lat, data.dest_lng);
         window.expandMap();
-        window.APP_MAP.drawRoute();
+        triggerRoute(); // ← unified trigger; was direct drawRoute() call
         window.toggleClearBtn('origin');
         window.toggleClearBtn('destination');
     },
 
-    // ─── MAP PICKER (With Double Paint Protection) ───────────────────────────
+    // ─── MAP PICKER ──────────────────────────────────────────────────────────
     _initPickerMap: function () {
         if (pickerMap) {
             google.maps.event.trigger(pickerMap, 'resize');
@@ -358,7 +371,6 @@ window.APP_MAP = {
         var el = document.getElementById('picker-map');
         if (!el) return;
 
-        // Still hidden? Retry.
         if (el.offsetWidth === 0 || el.offsetHeight === 0) {
             setTimeout(window.APP_MAP._initPickerMap, 100);
             return;
@@ -398,13 +410,10 @@ window.APP_MAP = {
 
         history.pushState({ mapPicker: true }, '', '');
 
-        // Double rAF to ensure modal is painted
         requestAnimationFrame(function () {
             requestAnimationFrame(function () {
                 setTimeout(function () {
                     window.APP_MAP._initPickerMap();
-
-                    // Logic to center map on existing point
                     if (pickerMap) {
                         var field = type === 'origin' ? 'origin' : 'dest';
                         var existingPlace = window.APP.places[field];
@@ -444,11 +453,11 @@ window.APP_MAP = {
         if (addressDisplay) addressDisplay.innerText = 'Mencari alamat...';
 
         if (!geocoder) geocoder = new google.maps.Geocoder();
-        var requestId = Date.now();
-        window.APP.picker.geocodeRequest = requestId;
+        var geocodeRequestId = Date.now();
+        window.APP.picker.geocodeRequest = geocodeRequestId;
 
         geocoder.geocode({ location: { lat: lat, lng: lng } }, function (results, status) {
-            if (window.APP.picker.geocodeRequest !== requestId) return;
+            if (window.APP.picker.geocodeRequest !== geocodeRequestId) return;
             if (confirmBtn) confirmBtn.disabled = false;
 
             if (status !== 'OK' || !results[0]) {
@@ -466,12 +475,12 @@ window.APP_MAP = {
             window.APP_MAP.updateMarker(markerType, lat, lng);
             window.expandMap();
 
-            if (window.APP.places.origin && window.APP.places.dest) window.APP_MAP.drawRoute();
+            if (window.APP.places.origin && window.APP.places.dest) triggerRoute(); // ← unified trigger; was direct drawRoute()
             window.APP_MAP.closeMapPicker();
         });
     },
 
-    // ─── SECTION 3: GPS — PICKUP ONLY ────────────────────────────────────────
+    // ─── GPS ─────────────────────────────────────────────────────────────────
     getCurrentLocation: function (inputType) {
         if (window.APP.picker.locked) return;
         if (!navigator.geolocation) {
@@ -511,7 +520,7 @@ window.APP_MAP = {
                         window.APP_MAP.updateLocationState(field, lat, lng, 'gps', cleaned);
                         window.APP_MAP.updateMarker(type, lat, lng);
                         window.expandMap();
-                        if (window.APP.places.origin && window.APP.places.dest) window.debouncedDrawRoute(); // P3
+                        if (window.APP.places.origin && window.APP.places.dest) triggerRoute();
                     } else {
                         if (window.showToast) window.showToast('Gagal mendeteksi nama jalan.');
                         else alert('Gagal mendeteksi nama jalan.');
@@ -528,7 +537,7 @@ window.APP_MAP = {
     }
 };
 
-// ─── 3. GLOBAL HELPERS ───────────────────────────────────────────────────────
+// ─── 4. GLOBAL HELPERS ───────────────────────────────────────────────────────
 window.useHistory = window.APP_MAP.useHistory;
 window.openMapPicker = window.APP_MAP.openMapPicker;
 window.closeMapPicker = window.APP_MAP.closeMapPicker;
@@ -536,23 +545,21 @@ window.confirmLocation = window.APP_MAP.confirmLocation;
 window.getCurrentLocation = window.APP_MAP.getCurrentLocation;
 window.getServiceMapSettings = window.APP_MAP.getServiceMapSettings;
 
-// P3: Debounced drawRoute — prevents rapid concurrent DirectionsService calls
-window.debouncedDrawRoute = function () {
-    if (_drawRouteTimer) clearTimeout(_drawRouteTimer);
-    _drawRouteTimer = setTimeout(function () {
-        _drawRouteTimer = null;
-        window.APP_MAP.drawRoute();
-    }, _drawRouteDelay);
-};
+// Expose triggerRoute as the ONLY public route trigger.
+// setService() and handleCarOptionChange() in app.js call this.
+// Nothing outside this file ever calls drawRoute() directly.
+window.triggerRoute = triggerRoute;
 
 window.expandMap = function () { document.getElementById('map-container').classList.add('expanded'); };
 window.setActiveField = function (field) { if (window.APP && window.APP.picker) window.APP.picker.activeField = field; };
+
 window.toggleClearBtn = function (id) {
     var input = document.getElementById(id);
     var btn = document.getElementById('clear-' + id);
     if (!input || !btn) return;
     btn.style.display = input.value.length > 0 ? 'flex' : 'none';
 };
+
 window.clearInput = function (id) {
     var input = document.getElementById(id);
     if (!input) return;
@@ -570,27 +577,30 @@ window.clearInput = function (id) {
         window.updateLink();
     }
 };
+
 window.handleInput = function (id) { window.toggleClearBtn(id); };
+
 window.addNote = function (text) {
     var noteInput = document.getElementById('note');
     if (!noteInput) return;
     noteInput.value = noteInput.value.length > 0 ? noteInput.value + ', ' + text : text;
     window.updateLink();
 };
+
 window.handleCarOptionChange = function () {
     var selected = document.querySelector('input[name="car-seat"]:checked');
     var seatValue = selected ? parseInt(selected.value, 10) : 4;
     window.APP.carOptions.seats = seatValue;
     window.APP.carOptions.toll = document.getElementById('car-toll').checked;
 
-    // ← TAMBAH INI: sync service ke CAR atau CAR_XL berdasarkan seat
     if (window.APP.service === 'CAR' || window.APP.service === 'CAR_XL') {
         window.APP.service = (seatValue === 6) ? 'CAR_XL' : 'CAR';
         console.log('[SERVICE] Seat changed to', seatValue, '→ service:', window.APP.service);
     }
 
-    if (window.APP.places.origin && window.APP.places.dest) window.debouncedDrawRoute(); // P3
+    if (window.APP.places.origin && window.APP.places.dest) triggerRoute();
 };
+
 window.addEventListener('popstate', function (event) {
     var modal = document.getElementById('map-picker-modal');
     if (modal && modal.classList.contains('active')) {
@@ -599,15 +609,18 @@ window.addEventListener('popstate', function (event) {
     }
 });
 
-// ─── 4. INIT MAP (ENTRY POINT) ──────────────────────────────────────────────
+// ─── 5. INIT MAP — SOLE INITIALIZATION ENTRY POINT ───────────────────────────
+// Google Maps SDK calls this via &callback=initMap after async load.
+// This is the ONLY place the map, ds, dr are created.
+// app.js initApp() does NOT call setService — only fetchActiveOrder (side-effect-free).
+// setService('RIDE') is called exactly ONCE, here, after map is ready.
 function initMap() {
-    console.log('[initMap] Google Maps API ready.');
+    console.log('[initMap] Google Maps API ready. Starting sole initialization sequence.');
     if (!document.getElementById('map')) return;
 
     try {
         var mapSettings = window.APP_MAP.getServiceMapSettings('RIDE');
 
-        // ─── SECTION 4: JAVA ISLAND BOUNDS ───────────────────────────────────
         map = new google.maps.Map(document.getElementById('map'), {
             center: mapSettings.center,
             zoom: mapSettings.zoom,
@@ -632,15 +645,27 @@ function initMap() {
 
         geocoder = new google.maps.Geocoder();
 
-        setTimeout(function () { window.APP_MAP.initAutocomplete(); }, 500);
+        // Gate flag — setService() checks this before triggering any route draw.
+        window._mapReady = true;
+
+        // Autocomplete init — short delay ensures map DOM is fully painted.
+        setTimeout(function () { window.APP_MAP.initAutocomplete(); }, 300);
+
+        // History chip — display only, no route draw.
         window.APP_MAP.checkHistory();
 
-        if (window.setService) window.setService('RIDE', document.querySelector('.tab'));
-        else if (window.APP && window.APP.setService) window.APP.setService('RIDE', document.querySelector('.tab'));
-        else setTimeout(function () { if (window.setService) window.setService('RIDE', document.querySelector('.tab')); }, 500);
+        // ── SINGLE setService CALL ON STARTUP ────────────────────────────────
+        // Exactly one call. initApp() does NOT call setService.
+        // Since no places are set yet, setService will NOT trigger a route draw here.
+        var defaultTab = document.querySelector('.tab[data-service="RIDE"]') || document.querySelector('.tab');
+        if (window.setService) window.setService('RIDE', defaultTab);
+        // ─────────────────────────────────────────────────────────────────────
+
+        console.log('[initMap] Complete. _mapReady=true');
 
     } catch (err) {
-        console.error('[initMap] CRITICAL: Map execution failed.', err);
+        console.error('[initMap] CRITICAL: Map initialization failed.', err);
+        window._mapReady = false;
     }
 }
 

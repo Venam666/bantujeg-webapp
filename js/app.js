@@ -1,6 +1,7 @@
 /* ========================
    app.js - Strict Payment Flow
    Backend is the ONLY pricing authority.
+   Refactor: initApp() no longer calls setService(). setService() guards on _mapReady.
    ======================== */
 
 // ─── TOAST SYSTEM ────────────────────────────────────────────────────────────
@@ -27,7 +28,7 @@ window.showToast = function (msg, duration) {
 
 window.APP = {
     service: 'RIDE',
-    uiState: 'IDLE', // IDLE | ROUTE_READY | PRICING_LOADING | PRICED | SUBMITTING | WAITING_PAYMENT | ACTIVE
+    uiState: 'IDLE',
     state: {
         pickup: { lat: null, lng: null, source: null, address: '' },
         dropoff: { lat: null, lng: null, source: null, address: '' }
@@ -45,25 +46,25 @@ window.APP = {
     carOptions: { seats: 4, toll: false },
     activeOrder: null,
     _qrisCountdownTimer: null,
-    _isFetchingOrder: false,   // P5: concurrent call guard
-    _pollingTimer: null,       // P4: polling timer
-    _pollingInterval: 5000,    // P4: 5 seconds
+    _isFetchingOrder: false,
+    _pollingTimer: null,
+    _pollingInterval: 5000,
 
     // ─── STARTUP ─────────────────────────────────────────────────────────────
+    // initApp runs on DOMContentLoaded — before the Google Maps SDK has loaded.
+    // It must NOT call setService() or trigger any map/route operations.
+    // setService('RIDE') is called exactly once, inside initMap() in map.js,
+    // after the map, ds, and dr are fully constructed.
     initApp: function () {
-        // Force Hide Modal on Load
         window.closeQrisModal();
 
-        // Mobile Menu Placeholder
         var menuBtn = document.getElementById('menu-btn');
         if (menuBtn) menuBtn.addEventListener('click', function () {
             if (window.showToast) window.showToast('Fitur ini belum tersedia.');
         });
 
-        // Set Default Service
-        window.setService('RIDE', document.querySelector('.tab[data-service="RIDE"]') || document.querySelector('.tab'));
-
-        // STRICT: Fetch Active Order on every load — recovers UI into ACTIVE state if needed
+        // Recover UI into ACTIVE state if there is an existing order.
+        // This is a network call — safe to do before map is ready.
         window.APP.fetchActiveOrder();
     },
 
@@ -81,27 +82,24 @@ window.APP = {
             jastipField.style.display = (service === 'FOOD_MART') ? 'block' : 'none';
         }
 
-        // Show/hide car options (P9: also show for CAR_XL)
+        // Show/hide car options
         var carOptions = document.getElementById('car-options');
         if (carOptions) {
             carOptions.style.display = (service === 'CAR' || service === 'CAR_XL') ? 'block' : 'none';
         }
 
-        // P9: Default seat selection per service
+        // Default seat selection per service
         if (service === 'CAR_XL') {
-            // This path usually not triggered by tab click, but just in case
             var sixSeatRadio = document.querySelector('input[name="car-seat"][value="6"]');
             if (sixSeatRadio) { sixSeatRadio.checked = true; window.APP.carOptions.seats = 6; }
         } else if (service === 'CAR') {
-            // Reset ke 4 seat default saat ganti tab
             window.APP.service = 'CAR';
             window.APP.carOptions.seats = 4;
-            // Reset radio button ke 4 seat
             var fourSeatRadio = document.querySelector('input[name="car-seat"][value="4"]');
             if (fourSeatRadio) { fourSeatRadio.checked = true; }
         }
 
-        // P7: Reset pricing state immediately — stale price from previous service must not show
+        // Reset pricing display immediately — stale price from previous service must not show
         window.APP.calc = { distance: 0, price: 0, duration: 0, withinLimit: true };
         var _priceCard = document.getElementById('price-card');
         var _errorCard = document.getElementById('error-card');
@@ -111,20 +109,26 @@ window.APP = {
         if (_distDisplay) _distDisplay.innerText = '0 km';
         window.APP.updateSubmitButton();
 
-        // fetchPricingConfig must complete before drawRoute uses the config.
+        // Fetch pricing config for the new service (background, non-blocking)
         window.APP.fetchPricingConfig(service);
 
-        // Recalculate price if route is already set
-        if (window.APP.places && window.APP.places.origin && window.APP.places.dest) {
-            if (window.APP_MAP && window.APP_MAP.drawRoute) {
-                window.debouncedDrawRoute();
-            }
+        // ── ROUTE TRIGGER GUARD ───────────────────────────────────────────────
+        // Only trigger a route draw if:
+        //   1. The map is fully initialized (_mapReady is true), AND
+        //   2. Both origin and destination are confirmed.
+        // This prevents setService() — called on DOMContentLoaded via initApp()
+        // in the old architecture — from racing with the async Maps SDK load.
+        // Now initApp() does NOT call setService(), so this guard is belt-and-suspenders.
+        if (window._mapReady &&
+            window.APP.places && window.APP.places.origin && window.APP.places.dest &&
+            window.triggerRoute) {
+            window.triggerRoute();
         }
+        // ─────────────────────────────────────────────────────────────────────
     },
 
     // ─── BACKEND SYNC ────────────────────────────────────────────────────────
     fetchActiveOrder: async function () {
-        // P5: Concurrent call guard — prevent multiple simultaneous fetches
         if (window.APP._isFetchingOrder) return;
         window.APP._isFetchingOrder = true;
         try {
@@ -133,7 +137,6 @@ window.APP = {
             });
 
             if (res.status === 401 || res.status === 403) {
-                // Session expired — stop polling. auth.js handles session on next page load.
                 console.warn('[ORDERS] 401 on /orders/active. Session expired — stopping polling.');
                 localStorage.removeItem('bj_token');
                 window.APP.stopPolling();
@@ -146,7 +149,6 @@ window.APP = {
                 window.APP.activeOrder = order;
                 window.APP.renderOrderState(order);
             } else {
-                // ✅ Explicit null path: no active order → unlock form
                 window.APP.activeOrder = null;
                 window.APP.hideStatusCard();
                 window.APP.unlockForm();
@@ -154,20 +156,16 @@ window.APP = {
             }
         } catch (e) {
             console.error('Fetch active order failed', e);
-            // Network error: do NOT unlock — preserve current state
         } finally {
-            window.APP._isFetchingOrder = false; // P5: always reset guard
+            window.APP._isFetchingOrder = false;
         }
     },
 
     // ─── PRICING CONFIG (UI HINTS ONLY) ──────────────────────────────────────
-    // Fetches GET /pricing/config once per service switch. Cached in memory.
-    // NEVER used for final price math — only for UI labels, distance limits.
     _pricingConfigCache: {},
-    _pricingConfigCacheTime: {}, // P6: TTL timestamps
+    _pricingConfigCacheTime: {},
     fetchPricingConfig: async function (service) {
         if (!service) service = window.APP.service;
-        // P6: 5-minute TTL cache check
         var _CACHE_TTL = 5 * 60 * 1000;
         var _cachedAt = window.APP._pricingConfigCacheTime[service] || 0;
         var _isFresh = window.APP._pricingConfigCache[service] && (Date.now() - _cachedAt) < _CACHE_TTL;
@@ -179,29 +177,24 @@ window.APP = {
             if (!res.ok) throw new Error('Config fetch failed: ' + res.status);
             var data = await res.json();
 
-            // Backend returns { success: true, data: { RIDE: {...}, SEND: {...}, ... } }
             var configs = (data.success && data.data) ? data.data : data;
             if (configs && typeof configs === 'object') {
-                // Cache all services at once
                 Object.keys(configs).forEach(function (svc) {
                     window.APP._pricingConfigCache[svc] = configs[svc];
-                    window.APP._pricingConfigCacheTime[svc] = Date.now(); // P6: record cache time
+                    window.APP._pricingConfigCacheTime[svc] = Date.now();
                 });
-                console.log('[PRICING CONFIG] Loaded from backend:', Object.keys(configs));
+                console.log('[PRICING CONFIG] Loaded:', Object.keys(configs));
             }
         } catch (e) {
             console.warn('[PRICING CONFIG] Failed to load, UI hints will use fallback.', e.message);
         }
     },
 
-    // Returns the backend config for a service (for UI hints only)
     getPricingConfig: function (service) {
         return window.APP._pricingConfigCache[service || window.APP.service] || null;
     },
 
     // ─── STATE RENDERER ───────────────────────────────────────────────────────
-    // Single function that decides what to show based on order status.
-    // Frontend NEVER guesses state — this is always driven by backend response.
     renderOrderState: function (order) {
         if (!order || !order.status) return;
 
@@ -210,8 +203,7 @@ window.APP = {
         if (status === 'WAITING_PAYMENT') {
             window.APP.uiState = 'WAITING_PAYMENT';
             window.APP.lockFormForActiveOrder();
-            window.APP.startPolling(); // P4
-            // Guard: only show QRIS if amount is confirmed
+            window.APP.startPolling();
             if (order.payment && order.payment.expected_amount > 0) {
                 window.openQrisModal(order);
             }
@@ -221,15 +213,14 @@ window.APP = {
         if (['SEARCHING', 'ACCEPTED', 'PICKING_UP', 'ARRIVED', 'ON_RIDE', 'BUYING', 'DELIVERING'].includes(status)) {
             window.APP.uiState = 'ACTIVE';
             window.APP.showStatusCard(order);
-            window.APP.startPolling(); // P4
+            window.APP.startPolling();
             return;
         }
 
         if (['COMPLETED', 'CANCELLED', 'EXPIRED'].includes(status)) {
-            // Order is done — clear active state, unlock form
             window.APP.activeOrder = null;
             window.APP.uiState = 'IDLE';
-            window.APP.stopPolling(); // P4
+            window.APP.stopPolling();
             window.APP.hideStatusCard();
             window.APP.unlockForm();
             window.APP.updateSubmitButton();
@@ -237,12 +228,12 @@ window.APP = {
         }
     },
 
-    // ─── P4: ORDER STATUS POLLING ─────────────────────────────────────────────
+    // ─── POLLING ─────────────────────────────────────────────────────────────
     startPolling: function () {
-        window.APP.stopPolling(); // clear any existing
+        window.APP.stopPolling();
         window.APP._pollingTimer = setInterval(async function () {
             if (!window.APP.activeOrder) { window.APP.stopPolling(); return; }
-            if (document.hidden) return; // pause when tab not visible — save battery & requests
+            if (document.hidden) return;
             await window.APP.fetchActiveOrder();
         }, window.APP._pollingInterval);
     },
@@ -255,7 +246,6 @@ window.APP = {
     },
 
     // ─── FORM LOCK / UNLOCK ──────────────────────────────────────────────────
-    // Disables all form inputs while an active order exists.
     lockFormForActiveOrder: function () {
         var inputs = document.querySelectorAll('#view-main input, #view-main select, #view-main textarea');
         inputs.forEach(function (el) { el.disabled = true; });
@@ -286,24 +276,17 @@ window.APP = {
             'DELIVERING': '📦 Driver sedang mengantar.'
         };
 
-        if (statusText) {
-            statusText.innerText = statusMessages[order.status] || ('Status: ' + order.status);
-        }
+        if (statusText) statusText.innerText = statusMessages[order.status] || ('Status: ' + order.status);
         if (orderIdText) {
             var id = order.orderId || order.order_id || '';
             orderIdText.innerText = id ? ('ID Order: ' + id.substring(0, 8).toUpperCase()) : '';
         }
 
-        // Show cancel button only for cancellable statuses
         var cancellableStatuses = ['SEARCHING', 'ACCEPTED', 'PICKING_UP', 'ARRIVED'];
-        if (cancelBtn) {
-            cancelBtn.style.display = cancellableStatuses.includes(order.status) ? 'block' : 'none';
-        }
+        if (cancelBtn) cancelBtn.style.display = cancellableStatuses.includes(order.status) ? 'block' : 'none';
 
-        // Lock form inputs while order is active
         window.APP.lockFormForActiveOrder();
 
-        // Hide the form, show the status card
         var cardInterface = document.querySelector('.card-interface');
         if (cardInterface) cardInterface.style.display = 'none';
 
@@ -339,10 +322,7 @@ window.APP = {
             var res = await fetch(apiUrl + '/orders/cancel', {
                 method: 'POST',
                 headers: Object.assign({ 'Content-Type': 'application/json' }, window.APP_AUTH.getAuthHeaders()),
-                body: JSON.stringify({
-                    orderId: orderId,
-                    reason: 'Customer cancel'
-                })
+                body: JSON.stringify({ orderId: orderId, reason: 'Customer cancel' })
             });
             var data = await res.json();
             if (data && (data.success || data.idempotent)) {
@@ -353,15 +333,13 @@ window.APP = {
         } catch (e) {
             if (window.showToast) window.showToast('Gagal membatalkan: ' + e.message);
         } finally {
-            // Always re-sync with backend
             await window.APP.fetchActiveOrder();
             if (cancelBtn) { cancelBtn.disabled = false; cancelBtn.innerText = 'Batalkan Order'; }
         }
     },
 
-    // ─── SECTION 6: SUBMIT FLOW ──────────────────────────────────────────────
+    // ─── SUBMIT FLOW ─────────────────────────────────────────────────────────
     submitOrder: async function () {
-        // 1. Gate checks
         if (!window.APP.state.pickup.lat || !window.APP.state.dropoff.lat) {
             if (window.showToast) window.showToast('Lengkapi lokasi dulu ya!');
             return;
@@ -374,8 +352,6 @@ window.APP = {
             if (window.showToast) window.showToast('Jarak melebihi batas layanan');
             return;
         }
-
-        // 2. Open Confirmation Modal instead of direct create
         window.APP.openConfirmModal();
     },
 
@@ -383,7 +359,6 @@ window.APP = {
         var modal = document.getElementById('modal-confirm-order');
         if (!modal) return;
 
-        // Populate Data
         document.getElementById('confirm-origin').innerText = window.APP.state.pickup.address.split(',')[0];
         document.getElementById('confirm-dest').innerText = window.APP.state.dropoff.address.split(',')[0];
 
@@ -393,24 +368,18 @@ window.APP = {
         var paymentMethod = document.getElementById('payment-method-input').value;
         document.getElementById('confirm-method').innerText = (paymentMethod === 'QRIS') ? 'QRIS (Scan)' : 'TUNAI (Cash)';
 
-        // Show Modal
         modal.classList.remove('hidden');
         modal.style.display = 'flex';
     },
 
     closeConfirmModal: function () {
         var modal = document.getElementById('modal-confirm-order');
-        if (modal) {
-            modal.classList.add('hidden');
-            modal.style.display = 'none';
-        }
+        if (modal) { modal.classList.add('hidden'); modal.style.display = 'none'; }
     },
 
     processOrder: async function () {
-        // Close modal first
         window.APP.closeConfirmModal();
 
-        // Lock UI
         var btn = document.getElementById('btn-submit');
         var btnText = document.getElementById('btn-text');
         if (btn) btn.classList.add('disabled');
@@ -430,25 +399,19 @@ window.APP = {
             if (response.error) throw new Error(response.error);
             if (!response.success && response.message) throw new Error(response.message);
 
-            // 3. Always fetch authoritative state from backend — no local guessing
             await window.APP.fetchActiveOrder();
-            // P4: Start polling after order is created
             if (window.APP.activeOrder) window.APP.startPolling();
 
         } catch (e) {
             console.error('[ORDER] Submit failed:', e);
             if (window.showToast) window.showToast('Gagal membuat order: ' + e.message);
         } finally {
-            // Restore button state via updateSubmitButton
             window.APP.updateSubmitButton();
         }
     },
 
-    // ─── SECTION 1: PRICING PREVIEW ─────────────────────────────────────────
-    // Called by map.js after route is calculated. Returns backend-authoritative price.
-    // This is the ONLY function allowed to set APP.calc.price to a positive value.
+    // ─── PRICING PREVIEW ─────────────────────────────────────────────────────
     fetchPricePreview: async function (pickupLocation, dropoffLocation, distanceKm) {
-        // Show loading state
         var priceDisplay = document.getElementById('price-display');
         var priceCard = document.getElementById('price-card');
         if (priceDisplay) priceDisplay.innerText = '⏳ Menghitung harga...';
@@ -456,7 +419,6 @@ window.APP = {
 
         try {
             var apiUrl = (window.API_URL || 'http://localhost:3000');
-            // Build preview payload — include vehicle_variant for CAR seat mapping
             var previewBody = {
                 service: window.APP.service,
                 pickupLocation: pickupLocation,
@@ -472,7 +434,6 @@ window.APP = {
                 body: JSON.stringify(previewBody)
             });
 
-            // Handle specific backend errors
             if (res.status === 422) {
                 var errData = await res.json().catch(function () { return {}; });
                 var msg = (errData && errData.message) || 'Layanan tidak tersedia untuk rute ini';
@@ -487,11 +448,9 @@ window.APP = {
             var data = await res.json();
 
             if (data && data.success && data.price > 0) {
-                // ✅ ONLY place APP.calc.price is set to a positive value
                 window.APP.calc.price = data.price;
                 window.APP.calc.distance = data.distanceKm || distanceKm || 0;
 
-                // ─── DISTANCE DEBUG TABLE (instrumentation only) ──────────────
                 var backendKm = data.distanceKm || 0;
                 var dbg = window.APP._distanceDebug || {};
                 console.table({
@@ -502,9 +461,7 @@ window.APP = {
                         ? (((backendKm - dbg.frontendKm) / dbg.frontendKm) * 100).toFixed(2) + '%'
                         : 'N/A'
                 });
-                // ─────────────────────────────────────────────────────────────
 
-                // Update UI with confirmed backend price
                 var fakePrice = Math.ceil((data.price * 1.10) / 500) * 500;
                 var fakeDisplay = document.getElementById('fake-price');
                 var distDisplay = document.getElementById('dist-display');
@@ -528,8 +485,7 @@ window.APP = {
         return null;
     },
 
-    // ─── SECTION 7: SUBMIT BUTTON GATE ──────────────────────────────────────
-    // Enabled ONLY when: no active order + pickup + dropoff + backend price + within limit
+    // ─── SUBMIT BUTTON GATE ──────────────────────────────────────────────────
     updateSubmitButton: function () {
         var btn = document.getElementById('btn-submit');
         var btnText = document.getElementById('btn-text');
@@ -539,7 +495,7 @@ window.APP = {
         var hasPickup = !!(window.APP.state.pickup && window.APP.state.pickup.lat);
         var hasDropoff = !!(window.APP.state.dropoff && window.APP.state.dropoff.lat);
         var hasPrice = window.APP.calc.price > 0;
-        var withinLimit = window.APP.calc.withinLimit !== false; // default true if not set
+        var withinLimit = window.APP.calc.withinLimit !== false;
         var isPricingLoading = window.APP.uiState === 'PRICING_LOADING';
 
         if (hasActiveOrder) {
@@ -559,9 +515,9 @@ window.APP = {
             btnText.innerText = 'Menunggu Harga...';
         } else {
             var displayService = 'Layanan';
-            if (window.APP.service === 'RIDE') { displayService = 'Ojek Motor'; }
-            if (window.APP.service === 'SEND') { displayService = 'Kirim Barang'; }
-            if (window.APP.service === 'FOOD_MART') { displayService = 'Food & Mart'; }
+            if (window.APP.service === 'RIDE') displayService = 'Ojek Motor';
+            if (window.APP.service === 'SEND') displayService = 'Kirim Barang';
+            if (window.APP.service === 'FOOD_MART') displayService = 'Food & Mart';
             if (window.APP.service === 'CAR' || window.APP.service === 'CAR_XL') {
                 displayService = window.APP.carOptions.seats === 6 ? 'Mobil (6 Seat)' : 'Mobil (4 Seat)';
             }
@@ -575,25 +531,17 @@ window.APP = {
     _buildPayload: function () {
         var svc = window.APP.service;
         var payload = {
-            service: (svc === 'CAR_XL') ? 'CAR' : svc, // Always send CAR; backend uses vehicle_variant
+            service: (svc === 'CAR_XL') ? 'CAR' : svc,
             customer_phone: localStorage.getItem('bj_phone') || '',
-            session_key: localStorage.getItem('bj_token') || '',  // W-P1: enables session-based order lookup
-            source: 'webapp',                                       // W-P1: identifies origin
-            pickupLocation: {
-                lat: window.APP.state.pickup.lat,
-                lng: window.APP.state.pickup.lng
-            },
-            dropoffLocation: {
-                lat: window.APP.state.dropoff.lat,
-                lng: window.APP.state.dropoff.lng
-            },
+            session_key: localStorage.getItem('bj_token') || '',
+            source: 'webapp',
+            pickupLocation: { lat: window.APP.state.pickup.lat, lng: window.APP.state.pickup.lng },
+            dropoffLocation: { lat: window.APP.state.dropoff.lat, lng: window.APP.state.dropoff.lng },
             destination: window.APP.state.dropoff.address,
             note: document.getElementById('note') ? document.getElementById('note').value : '',
-            // Extras for food/mart
             items: document.getElementById('items') ? document.getElementById('items').value : '',
             estPrice: document.getElementById('est-price') ? document.getElementById('est-price').value : ''
         };
-        // CAR service: include vehicle_variant for seat-based pricing
         if (svc === 'CAR' || svc === 'CAR_XL') {
             payload.vehicle_variant = window.APP.carOptions.seats || 4;
         }
@@ -621,16 +569,12 @@ window.APP = {
         });
 
         var text = await res.text();
-        try {
-            return JSON.parse(text);
-        } catch (e) {
-            throw new Error('Server Error: ' + res.status);
-        }
+        try { return JSON.parse(text); }
+        catch (e) { throw new Error('Server Error: ' + res.status); }
     },
 
-    // ─── MODAL CONTROLLERS (STRICT) ──────────────────────────────────────────
+    // ─── QRIS MODAL ──────────────────────────────────────────────────────────
     openQrisModal: function (order) {
-        // HARD GUARDS — QRIS modal NEVER auto-appears
         if (!order) return;
         if (order.status !== 'WAITING_PAYMENT') return;
         if (!order.payment) return;
@@ -644,14 +588,11 @@ window.APP = {
             amountEl.innerText = 'Rp ' + (order.payment.expected_amount).toLocaleString('id-ID');
             modal.classList.remove('hidden');
             modal.style.display = 'flex';
-
-            // Start 15-minute countdown
             window.APP._startQrisCountdown(15 * 60, countdownEl);
         }
     },
 
     _startQrisCountdown: function (totalSeconds, el) {
-        // Clear any existing timer
         if (window.APP._qrisCountdownTimer) clearInterval(window.APP._qrisCountdownTimer);
         var remaining = totalSeconds;
 
@@ -670,7 +611,6 @@ window.APP = {
                 clearInterval(window.APP._qrisCountdownTimer);
                 window.APP._qrisCountdownTimer = null;
                 if (el) el.innerText = 'EXPIRED';
-                // Sync with backend — payment may have timed out
                 window.APP.fetchActiveOrder();
             }
         }, 1000);
@@ -678,11 +618,7 @@ window.APP = {
 
     closeQrisModal: function () {
         var modal = document.getElementById('modal-qris');
-        if (modal) {
-            modal.classList.add('hidden');
-            modal.style.display = 'none';
-        }
-        // Clear countdown timer
+        if (modal) { modal.classList.add('hidden'); modal.style.display = 'none'; }
         if (window.APP._qrisCountdownTimer) {
             clearInterval(window.APP._qrisCountdownTimer);
             window.APP._qrisCountdownTimer = null;
@@ -690,9 +626,7 @@ window.APP = {
     },
 
     cancelQrisPayment: function () {
-        // 1. Cancel the active order (unlocks form)
         window.APP.cancelActiveOrder();
-        // 2. Hide the modal instantly
         window.APP.closeQrisModal();
     }
 };
@@ -716,9 +650,7 @@ window.cancelActiveOrder = function () { window.APP.cancelActiveOrder(); };
 window.cancelQrisPayment = function () { window.APP.cancelQrisPayment(); };
 window.finishQrisPayment = async function () {
     if (window.showToast) window.showToast('⏳ Mengecek pembayaran...');
-    // Do NOT close modal yet — wait for backend confirmation
     await window.APP.fetchActiveOrder();
-    // If still WAITING_PAYMENT, reopen modal
     var order = window.APP.activeOrder;
     if (order && order.status === 'WAITING_PAYMENT') {
         if (window.showToast) window.showToast('Pembayaran belum terkonfirmasi. Coba lagi.');
@@ -728,11 +660,13 @@ window.finishQrisPayment = async function () {
     }
 };
 
-// P4: Page Visibility — immediately sync when tab becomes visible again
+// Page Visibility — immediately sync when tab becomes visible again
 document.addEventListener('visibilitychange', function () {
     if (!document.hidden && window.APP.activeOrder) {
         window.APP.fetchActiveOrder();
     }
 });
 
+// DOMContentLoaded: only boots auth recovery (fetchActiveOrder).
+// Does NOT call setService — that happens in initMap() after the map is ready.
 document.addEventListener('DOMContentLoaded', window.APP.initApp);
