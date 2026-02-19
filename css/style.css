@@ -7,6 +7,14 @@
     --dark: #0F172A;
     --gray: #F8FAFC;
     --border: #E2E8F0;
+
+    /* Native UI Variables */
+    --shadow-soft: 0 4px 24px rgba(0, 0, 0, 0.06);
+    --shadow-up: 0 -4px 20px rgba(0, 0, 0, 0.08);
+    --radius-xl: 24px;
+    --radius-lg: 16px;
+    --z-modal: 9999;
+    --z-sheet: 1000;
 }
 
 * {
@@ -557,9 +565,25 @@ input:focus {
 }
 
 .btn-cta.disabled {
-    background: #cbd5e1;
+    background: #E2E8F0;
+    /* Lighter gray for disabled */
+    color: #94A3B8;
     box-shadow: none;
     pointer-events: none;
+}
+
+.btn-cta.loading {
+    pointer-events: none;
+    background: var(--primary);
+    opacity: 0.9;
+}
+
+.btn-cta.loading #btn-text {
+    display: none;
+}
+
+.btn-cta.loading .spinner {
+    display: block;
 }
 
 .spinner {
@@ -812,17 +836,22 @@ input:focus {
 /* ========================
    MAP PICKER MODAL
    ======================== */
+/* ========================
+   MAP PICKER MODAL
+   ======================== */
 #map-picker-modal {
     position: fixed;
     inset: 0;
     z-index: 9999;
     background: white;
-    display: none;
+    display: flex;
     flex-direction: column;
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 #map-picker-modal.active {
-    display: flex;
+    transform: translateY(0);
 }
 
 .picker-header {
@@ -943,4 +972,101 @@ input:focus {
 
 .hidden {
     display: none !important;
+}
+
+/* ========================
+   NATIVE UI COMPONENTS
+   ======================== */
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(4px);
+    z-index: var(--z-modal);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+    display: flex;
+    /* For centering non-sheet modals if needed */
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-backdrop.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.bottom-sheet {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background: white;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    box-shadow: var(--shadow-up);
+    z-index: calc(var(--z-modal) + 1);
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    padding-bottom: env(safe-area-inset-bottom);
+    display: flex;
+    flex-direction: column;
+    max-height: 85vh;
+}
+
+.bottom-sheet.active {
+    transform: translateY(0);
+}
+
+.sheet-handle {
+    width: 48px;
+    height: 5px;
+    background: #E2E8F0;
+    border-radius: 10px;
+    margin: 12px auto;
+    flex-shrink: 0;
+}
+
+.sheet-content {
+    padding: 0 24px 24px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Native Input Style Override */
+input[type="text"],
+input[type="tel"],
+input[type="number"],
+textarea {
+    font-size: 16px !important;
+    /* Prevent iOS zoom */
+    border: 1px solid var(--border) !important;
+    box-shadow: none !important;
+}
+
+input:focus,
+textarea:focus {
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1) !important;
+    outline: none;
+}
+
+/* Skeleton Loading */
+.skeleton {
+    background: #f0f2f5;
+    background: linear-gradient(90deg, #f0f2f5 25%, #e6e8eb 50%, #f0f2f5 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 8px;
+    color: transparent !important;
+}
+
+@keyframes shimmer {
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
 }

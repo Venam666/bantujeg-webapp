@@ -153,14 +153,12 @@ window.APP_AUTH = {
                     } else {
                         console.warn('[AUTH] Verification logic failed:', data);
                         if (window.showToast) window.showToast('Link tidak valid atau sudah dipakai. Minta link baru ya.');
-                        else alert('Link masuk tidak valid atau sudah kadaluarsa. Coba minta lagi ya.');
                         window.APP_AUTH.showLogin();
                     }
                 })
                 .catch(function (err) {
                     console.error('[AUTH] Verify error:', err);
                     if (window.showToast) window.showToast('Gagal memverifikasi. Cek koneksi internet kamu.');
-                    else alert('Gagal memverifikasi. Cek koneksi internet kamu.');
                     window.APP_AUTH.showLogin();
                 });
             return; // Wait for async verify
@@ -189,7 +187,6 @@ window.APP_AUTH = {
 
         if (!phone) {
             if (window.showToast) window.showToast('Masukkan nomor HP dulu ya Kak!');
-            else alert('Masukkan nomor HP dulu ya Kak!');
             return;
         }
 
@@ -221,17 +218,14 @@ window.APP_AUTH = {
                 if (btn) { btn.disabled = false; btn.innerText = 'Kirim Magic Link →'; }
                 if (data && data.success) {
                     if (window.showToast) window.showToast('Magic link dikirim ke WhatsApp kamu! 🎉 Cek sekarang.', 5000);
-                    else alert('Magic link sudah dikirim ke WhatsApp kamu! 🎉 Cek sekarang.');
                 } else {
                     if (window.showToast) window.showToast(data.message || 'Gagal mengirim link. Coba lagi.');
-                    else alert(data.message || 'Gagal mengirim link. Coba lagi.');
                 }
             })
             .catch(function (err) {
                 if (btn) { btn.disabled = false; btn.innerText = 'Kirim Magic Link →'; }
                 console.error('[AUTH] Request login error:', err);
                 if (window.showToast) window.showToast('Gagal terhubung ke server. Cek koneksi internet kamu.');
-                else alert('Gagal terhubung ke server. Cek koneksi internet kamu.');
             });
     },
 

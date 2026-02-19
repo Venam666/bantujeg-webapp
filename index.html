@@ -216,11 +216,13 @@
     <!-- ========================
          CONFIRMATION MODAL
          ======================== -->
-    <div id="modal-confirm-order" class="hidden"
-        style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:9999;justify-content:center;align-items:end; animation:fadeIn 0.2s;">
-        <div class="confirm-sheet">
-            <div class="sheet-handle"></div>
-            <h3>Konfirmasi Order</h3>
+    <!-- ========================
+         CONFIRMATION SHEET
+         ======================== -->
+    <div id="modal-confirm-order" class="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-content">
+            <h3 style="text-align:center; margin-bottom:24px; font-size:1.2rem; font-weight:800;">Konfirmasi Order</h3>
 
             <div class="confirm-summary">
                 <div class="summary-row">
@@ -257,23 +259,37 @@
          Shown when an order is active (SEARCHING, ACCEPTED, ON_RIDE, etc.)
          Hidden by default — controlled strictly by app.js renderOrderState()
          ======================== -->
-    <div id="active-order-card"
-        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:#f8f9fa; z-index:100; flex-direction:column; align-items:center; justify-content:center; padding:32px; box-sizing:border-box; font-family:'Plus Jakarta Sans',sans-serif;">
-        <div style="font-size:3rem; margin-bottom:16px;">🛵</div>
-        <div id="order-status-text"
-            style="font-size:1.2rem; font-weight:700; color:#1a1a1a; text-align:center; margin-bottom:8px;">Mencari
-            driver...</div>
-        <div id="order-id-text" style="font-size:0.85rem; color:#888; margin-bottom:32px;"></div>
-        <p style="font-size:0.9rem; color:#555; text-align:center; max-width:280px; line-height:1.6;">Pantau status
-            ordermu lewat WhatsApp. Kamu bisa tutup halaman ini.</p>
-        <div
-            style="margin-top:24px; background:#e8f5e9; border-radius:12px; padding:16px; max-width:300px; text-align:center;">
-            <div style="font-size:0.8rem; color:#2e7d32; font-weight:600;">💬 Notifikasi dikirim ke WhatsApp kamu</div>
+    <!-- ========================
+         ACTIVE ORDER SHEET
+         Overlay that slides up, keeping map visible.
+         ======================== -->
+    <div id="active-order-card" class="bottom-sheet" style="z-index: 1002;">
+        <div class="sheet-handle"></div>
+        <div class="sheet-content">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <div>
+                    <div id="order-status-text" style="font-size:1.1rem; font-weight:700; color:var(--dark);">Mencari
+                        driver...</div>
+                    <div id="order-id-text" style="font-size:0.8rem; color:#64748B;"></div>
+                </div>
+                <div style="font-size:2rem;">🛵</div>
+            </div>
+
+            <div style="background:#F1F5F9; border-radius:16px; padding:16px; margin-bottom:16px;">
+                <p style="font-size:0.9rem; color:#475569; margin-bottom:8px;">
+                    Pantau status order lewat WhatsApp.
+                </p>
+                <div
+                    style="display:flex; gap:8px; align-items:center; color:#059669; font-weight:600; font-size:0.85rem;">
+                    <span>📱</span> Notifikasi dikirim ke WA
+                </div>
+            </div>
+
+            <button id="order-cancel-btn" onclick="cancelActiveOrder()" class="btn-secondary"
+                style="width:100%; color:#EF4444; border-color:#FECACA; background:#FEF2F2;">
+                Batalkan Order
+            </button>
         </div>
-        <button id="order-cancel-btn" onclick="cancelActiveOrder()"
-            style="display:none; margin-top:24px; padding:12px 32px; background:#fff; color:#e53935; border:2px solid #e53935; border-radius:50px; font-size:0.95rem; font-weight:700; cursor:pointer; font-family:'Plus Jakarta Sans',sans-serif;">
-            Batalkan Order
-        </button>
     </div>
 
     <!-- Map Picker Modal (outside view-main so it always overlays) -->
@@ -296,33 +312,37 @@
     </div>
 
     <!-- QRIS Modal -->
-    <div id="modal-qris" class="hidden"
-        style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:9999;justify-content:center;align-items:center;">
-        <div
-            style="background:white;width:90%;max-width:400px;border-radius:16px;padding:24px;text-align:center;position:relative;animation:slideUp 0.3s ease-out;">
-            <h3 style="margin:0 0 16px 0;font-family:'Inter',sans-serif;font-weight:700;">Scan QRIS BantuJeg</h3>
+    <!-- QRIS Sheet -->
+    <div id="modal-qris" class="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-content" style="text-align:center;">
+            <h3 style="margin:0 0 16px 0; font-weight:700;">Scan QRIS BantuJeg</h3>
             <img src="./assets/qris/dummy.png"
-                style="width:200px;height:200px;margin:0 auto 16px;display:block;border:2px solid #f0f0f0;border-radius:12px;"
+                style="width:200px; height:200px; margin:0 auto 16px; display:block; border:2px solid #f0f0f0; border-radius:12px;"
                 alt="QRIS Code">
-            <p style="font-size:14px;color:#666;margin-bottom:8px;">Total Bayar</p>
-            <h2 id="qris-amount" style="margin:0 0 16px 0;color:#00AA13;font-size:24px;font-weight:800;">Rp 0</h2>
+
+            <p style="font-size:14px; color:#666; margin-bottom:8px;">Total Bayar</p>
+            <h2 id="qris-amount" style="margin:0 0 16px 0; color:#10B981; font-size:24px; font-weight:800;">Rp 0</h2>
+
             <div
-                style="background:#fff4e5;color:#d97706;padding:8px;border-radius:8px;font-size:12px;margin-bottom:24px;">
+                style="background:#FFFFEB; color:#B45309; padding:8px; border-radius:8px; font-size:12px; margin-bottom:24px; display:inline-block; width:100%;">
                 ⏳ Selesaikan dalam: <span id="qris-countdown"
-                    style="font-weight:700;font-variant-numeric:tabular-nums;">15:00</span>
+                    style="font-weight:700; font-variant-numeric:tabular-nums;">15:00</span>
             </div>
-            <button id="btn-qris-done"
-                style="width:100%;padding:14px;background:#00AA13;color:white;border:none;border-radius:50px;font-weight:700;font-size:16px;cursor:pointer;box-shadow:0 4px 6px -1px rgba(0, 170, 19, 0.3);"
+
+            <button id="btn-qris-done" class="btn-primary" style="width:100%; margin-bottom:12px;"
                 onclick="finishQrisPayment()">
                 SAYA SUDAH BAYAR
             </button>
-            <button id="btn-qris-cancel"
-                style="width:100%;margin-top:12px;padding:12px;background:none;color:#d32f2f;border:1px solid #ffcdd2;border-radius:50px;font-weight:600;font-size:14px;cursor:pointer;"
+            <button id="btn-qris-cancel" class="btn-secondary" style="width:100%; color:#EF4444; border-color:#FECACA;"
                 onclick="cancelQrisPayment()">
                 Batalkan & Revisi
             </button>
         </div>
     </div>
+
+    <!-- Global Backdrop -->
+    <div id="modal-backdrop" class="modal-backdrop"></div>
 
     <!-- Script Order: 1. Auth/API -> 2. App -> 3. Map -> 4. Google -->
     <script src="./js/auth.js"></script>

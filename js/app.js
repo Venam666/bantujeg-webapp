@@ -64,8 +64,17 @@ window.APP = {
         });
 
         // Recover UI into ACTIVE state if there is an existing order.
-        // This is a network call — safe to do before map is ready.
         window.APP.fetchActiveOrder();
+
+        // Native UI: Backdrop click closes modals
+        var backdrop = document.getElementById('modal-backdrop');
+        if (backdrop) {
+            backdrop.addEventListener('click', function () {
+                window.APP.closeConfirmModal();
+                window.APP.closeQrisModal();
+                // Do NOT close active order card (it's persistent)
+            });
+        }
     },
 
     // ─── SERVICE SWITCHER ─────────────────────────────────────────────────────
@@ -293,12 +302,13 @@ window.APP = {
         var bottomBar = document.querySelector('.bottom-bar');
         if (bottomBar) bottomBar.style.display = 'none';
 
-        card.style.display = 'flex';
+        // Native Transition: Slide up
+        card.classList.add('active');
     },
 
     hideStatusCard: function () {
         var card = document.getElementById('active-order-card');
-        if (card) card.style.display = 'none';
+        if (card) card.classList.remove('active');
 
         var cardInterface = document.querySelector('.card-interface');
         if (cardInterface) cardInterface.style.display = '';
@@ -357,6 +367,7 @@ window.APP = {
 
     openConfirmModal: function () {
         var modal = document.getElementById('modal-confirm-order');
+        var backdrop = document.getElementById('modal-backdrop');
         if (!modal) return;
 
         document.getElementById('confirm-origin').innerText = window.APP.state.pickup.address.split(',')[0];
@@ -368,22 +379,22 @@ window.APP = {
         var paymentMethod = document.getElementById('payment-method-input').value;
         document.getElementById('confirm-method').innerText = (paymentMethod === 'QRIS') ? 'QRIS (Scan)' : 'TUNAI (Cash)';
 
-        modal.classList.remove('hidden');
-        modal.style.display = 'flex';
+        modal.classList.add('active');
+        if (backdrop) backdrop.classList.add('active');
     },
 
     closeConfirmModal: function () {
         var modal = document.getElementById('modal-confirm-order');
-        if (modal) { modal.classList.add('hidden'); modal.style.display = 'none'; }
+        var backdrop = document.getElementById('modal-backdrop');
+        if (modal) modal.classList.remove('active');
+        if (backdrop) backdrop.classList.remove('active');
     },
 
     processOrder: async function () {
         window.APP.closeConfirmModal();
 
         var btn = document.getElementById('btn-submit');
-        var btnText = document.getElementById('btn-text');
-        if (btn) btn.classList.add('disabled');
-        if (btnText) btnText.innerText = '⏳ Memproses...';
+        if (btn) btn.classList.add('loading');
 
         try {
             var method = document.getElementById('payment-method-input').value || 'CASH';
@@ -412,9 +423,12 @@ window.APP = {
 
     // ─── PRICING PREVIEW ─────────────────────────────────────────────────────
     fetchPricePreview: async function (pickupLocation, dropoffLocation, distanceKm) {
+        window.APP.uiState = 'PRICING_LOADING';
+        window.APP.updateSubmitButton();
+
         var priceDisplay = document.getElementById('price-display');
         var priceCard = document.getElementById('price-card');
-        if (priceDisplay) priceDisplay.innerText = '⏳ Menghitung harga...';
+        if (priceDisplay) priceDisplay.innerText = '...';
         if (priceCard) priceCard.style.display = 'flex';
 
         try {
@@ -481,6 +495,9 @@ window.APP = {
             window.APP.calc.price = 0;
             if (priceCard) priceCard.style.display = 'none';
             window.APP.updateSubmitButton();
+        } finally {
+            if (window.APP.uiState === 'PRICING_LOADING') window.APP.uiState = 'IDLE';
+            window.APP.updateSubmitButton();
         }
         return null;
     },
@@ -508,8 +525,8 @@ window.APP = {
             btn.classList.add('disabled');
             btnText.innerText = 'Jarak Terlalu Jauh';
         } else if (isPricingLoading) {
-            btn.classList.add('disabled');
-            btnText.innerText = 'Menghitung Harga...';
+            btn.classList.add('loading');
+            btn.classList.remove('disabled');
         } else if (!hasPrice) {
             btn.classList.add('disabled');
             btnText.innerText = 'Menunggu Harga...';
@@ -523,6 +540,7 @@ window.APP = {
             }
 
             btn.classList.remove('disabled');
+            btn.classList.remove('loading');
             btnText.innerText = 'Pesan ' + displayService + ' →';
         }
     },
@@ -586,8 +604,10 @@ window.APP = {
 
         if (amountEl && modal) {
             amountEl.innerText = 'Rp ' + (order.payment.expected_amount).toLocaleString('id-ID');
-            modal.classList.remove('hidden');
-            modal.style.display = 'flex';
+            modal.classList.add('active');
+            var backdrop = document.getElementById('modal-backdrop');
+            if (backdrop) backdrop.classList.add('active');
+
             window.APP._startQrisCountdown(15 * 60, countdownEl);
         }
     },
@@ -618,7 +638,10 @@ window.APP = {
 
     closeQrisModal: function () {
         var modal = document.getElementById('modal-qris');
-        if (modal) { modal.classList.add('hidden'); modal.style.display = 'none'; }
+        var backdrop = document.getElementById('modal-backdrop');
+        if (modal) modal.classList.remove('active');
+        if (backdrop) backdrop.classList.remove('active');
+
         if (window.APP._qrisCountdownTimer) {
             clearInterval(window.APP._qrisCountdownTimer);
             window.APP._qrisCountdownTimer = null;
