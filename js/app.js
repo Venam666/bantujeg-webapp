@@ -50,7 +50,9 @@ window.APP = {
     _pollingTimer: null,
     _isFetchingOrder: false,
     _pollingTimer: null,
+    _pollingTimer: null,
     _pollingInterval: 7000,
+    _isSubmittingOrder: false,
 
     // ─── STARTUP ─────────────────────────────────────────────────────────────
     // initApp runs on DOMContentLoaded — before the Google Maps SDK has loaded.
@@ -417,10 +419,18 @@ window.APP = {
     },
 
     processOrder: async function () {
+        if (window.APP._isSubmittingOrder) {
+            console.warn("[ORDER] Duplicate submit prevented.");
+            return;
+        }
+        window.APP._isSubmittingOrder = true;
         window.APP.closeConfirmModal();
 
         var btn = document.getElementById('btn-submit');
-        if (btn) btn.classList.add('loading');
+        if (btn) {
+            btn.classList.add('loading');
+            btn.disabled = true;
+        }
 
         try {
             var method = document.getElementById('payment-method-input').value || 'CASH';
@@ -443,6 +453,8 @@ window.APP = {
             console.error('[ORDER] Submit failed:', e);
             if (window.showToast) window.showToast('Gagal membuat order: ' + e.message);
         } finally {
+            window.APP._isSubmittingOrder = false;
+            if (btn) btn.disabled = false;
             window.APP.updateSubmitButton();
         }
     },
@@ -611,6 +623,11 @@ window.APP = {
             headers: Object.assign({ 'Content-Type': 'application/json' }, window.APP_AUTH.getAuthHeaders()),
             body: JSON.stringify(payload)
         });
+
+        if (res.status === 429) {
+            console.warn("[ORDER] Rate limited on create.");
+            throw new Error("Terlalu banyak request. Tunggu sebentar.");
+        }
 
         var text = await res.text();
         try { return JSON.parse(text); }
