@@ -66,16 +66,21 @@ window.APP_AUTH = {
             }
 
             if (res.status === 401) {
-                // Token expired in Firestore. bj_phone is still valid — user is known.
-                // Remove only the dead token. Keep the phone. Send a fresh magic link silently.
-                console.warn('[AUTH] Session expired (401). Refreshing silently — user stays in app.');
-                localStorage.removeItem('bj_token');
-                window.APP_AUTH.silentRefresh();
-                return;
+                // Token invalid or expired.
+                // DO NOT silentRefresh automatically -> causes infinite loop if cookie is rejected.
+                console.warn('[AUTH] Session invalid (401). clearing identity & showing login.');
+
+                // Clear local state
+                localStorage.removeItem('bj_phone');
+                localStorage.removeItem('bj_session_expire');
+
+                // Show login screen
+                window.APP_AUTH.showLogin();
+                return false;
             }
 
-            // Any other error (500, etc.) — do nothing. Stay on current screen.
-            console.warn('[AUTH] /auth/me returned', res.status, '— staying on current screen.');
+            // Any other error (500, etc.) — do nothing.
+            console.warn('[AUTH] /auth/me returned', res.status, '— unexpected error.');
             return false;
         } catch (e) {
             // Network error — do NOT clear session, do NOT show login.
