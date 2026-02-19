@@ -89,11 +89,16 @@ window.APP = {
 
         // P9: Default seat selection per service
         if (service === 'CAR_XL') {
+            // This path usually not triggered by tab click, but just in case
             var sixSeatRadio = document.querySelector('input[name="car-seat"][value="6"]');
             if (sixSeatRadio) { sixSeatRadio.checked = true; window.APP.carOptions.seats = 6; }
         } else if (service === 'CAR') {
+            // Reset ke 4 seat default saat ganti tab
+            window.APP.service = 'CAR';
+            window.APP.carOptions.seats = 4;
+            // Reset radio button ke 4 seat
             var fourSeatRadio = document.querySelector('input[name="car-seat"][value="4"]');
-            if (fourSeatRadio) { fourSeatRadio.checked = true; window.APP.carOptions.seats = 4; }
+            if (fourSeatRadio) { fourSeatRadio.checked = true; }
         }
 
         // P7: Reset pricing state immediately — stale price from previous service must not show
@@ -459,7 +464,8 @@ window.APP = {
                 body: JSON.stringify({
                     service: window.APP.service,
                     pickupLocation: pickupLocation,
-                    dropoffLocation: dropoffLocation
+                    dropoffLocation: dropoffLocation,
+                    distanceKm: distanceKm
                 })
             });
 
@@ -549,8 +555,15 @@ window.APP = {
             btn.classList.add('disabled');
             btnText.innerText = 'Menunggu Harga...';
         } else {
+            var displayService = 'Layanan';
+            if (window.APP.service === 'RIDE') { displayService = 'Ojek Motor'; }
+            if (window.APP.service === 'SEND') { displayService = 'Kirim Barang'; }
+            if (window.APP.service === 'FOOD_MART') { displayService = 'Food & Mart'; }
+            if (window.APP.service === 'CAR') { displayService = 'Mobil (4 Seat)'; }
+            if (window.APP.service === 'CAR_XL') { displayService = 'Mobil XL (6 Seat)'; }
+
             btn.classList.remove('disabled');
-            btnText.innerText = 'Pesan Sekarang →';
+            btnText.innerText = 'Pesan ' + displayService + ' →';
         }
     },
 
@@ -569,7 +582,6 @@ window.APP = {
                 lat: window.APP.state.dropoff.lat,
                 lng: window.APP.state.dropoff.lng
             },
-            origin: window.APP.state.pickup.address,
             destination: window.APP.state.dropoff.address,
             note: document.getElementById('note') ? document.getElementById('note').value : '',
             // Extras for food/mart

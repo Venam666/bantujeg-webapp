@@ -157,17 +157,19 @@ window.APP_MAP = {
             }
 
             // ✅ Find SHORTEST route among alternatives
-            if (result.routes.length > 1) {
+            if (result.routes && result.routes.length > 1) {
                 result.routes.sort(function (a, b) {
-                    return a.legs[0].distance.value - b.legs[0].distance.value;
+                    var distA = a.legs.reduce(function (sum, leg) { return sum + leg.distance.value; }, 0);
+                    var distB = b.legs.reduce(function (sum, leg) { return sum + leg.distance.value; }, 0);
+                    return distA - distB;
                 });
             }
 
-            // Explicitly use the shortest one (index 0 after sort)
-            // We create a new result object or just let the modified result pass through
-            // DirectionsRenderer renders routes[routeIndex], default 0.
+            // Set directions SETELAH sort, pakai routeIndex 0 (terpendek)
             dr.setDirections(result);
             dr.setRouteIndex(0);
+            console.log('[ROUTE] Alternatif tersedia:', result.routes.length,
+                '| Dipilih: rute terpendek =', result.routes[0].legs[0].distance.value, 'm');
 
             if (result.routes[0] && result.routes[0].bounds) {
                 map.fitBounds(result.routes[0].bounds, { padding: 60 });
@@ -545,8 +547,16 @@ window.addNote = function (text) {
 };
 window.handleCarOptionChange = function () {
     var selected = document.querySelector('input[name="car-seat"]:checked');
-    window.APP.carOptions.seats = selected ? parseInt(selected.value, 10) : 4;
+    var seatValue = selected ? parseInt(selected.value, 10) : 4;
+    window.APP.carOptions.seats = seatValue;
     window.APP.carOptions.toll = document.getElementById('car-toll').checked;
+
+    // ← TAMBAH INI: sync service ke CAR atau CAR_XL berdasarkan seat
+    if (window.APP.service === 'CAR' || window.APP.service === 'CAR_XL') {
+        window.APP.service = (seatValue === 6) ? 'CAR_XL' : 'CAR';
+        console.log('[SERVICE] Seat changed to', seatValue, '→ service:', window.APP.service);
+    }
+
     if (window.APP.places.origin && window.APP.places.dest) window.debouncedDrawRoute(); // P3
 };
 window.addEventListener('popstate', function (event) {
