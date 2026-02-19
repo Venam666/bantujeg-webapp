@@ -186,7 +186,44 @@ window.APP = {
                 return;
             }
 
-            var data = await res.json();
+            var rawText = await res.text();
+
+            // ─── DIAGNOSTIC ONLY — DO NOT SHIP TO PRODUCTION ──────────────
+            console.group('[DIAGNOSTIC] GET /orders/active — Raw Response');
+            console.log('HTTP Status     :', res.status);
+            console.log('Content-Length  :', res.headers.get('content-length'));
+            console.log('Content-Type    :', res.headers.get('content-type'));
+            console.log('Raw Body (text) :', rawText);
+            // ──────────────────────────────────────────────────────────────
+
+            var data;
+            try {
+                data = JSON.parse(rawText);
+            } catch (parseErr) {
+                console.error('[DIAGNOSTIC] JSON.parse failed:', parseErr.message);
+                console.groupEnd();
+                return;
+            }
+
+            // ─── DIAGNOSTIC ONLY — DO NOT SHIP TO PRODUCTION ──────────────
+            console.log('Parsed data (full object):');
+            console.dir(data, { depth: null });
+            console.log('Top-level keys  :', Object.keys(data || {}));
+            console.log('data.activeOrder:', data && data.activeOrder ? JSON.stringify(data.activeOrder) : '❌ undefined/null');
+            console.log('data.order      :', data && data.order ? JSON.stringify(data.order) : '❌ undefined/null');
+            console.log('data.data       :', data && data.data ? JSON.stringify(data.data) : '❌ undefined/null');
+            console.log('Array check     :', Array.isArray(data) ? '✅ is array, length=' + data.length : '❌ not array');
+
+            var _diagOrder = data && (data.activeOrder || data.order || data.data || (Array.isArray(data) && data[0]) || null);
+            if (_diagOrder) {
+                console.log('Detected order status:', _diagOrder.status !== undefined ? _diagOrder.status : '❌ status field missing');
+                console.log('Full detected order :', JSON.stringify(_diagOrder));
+            } else {
+                console.warn('⚠️  No order found under any known key. Response body may be empty, null, or use an unexpected wrapper.');
+            }
+            console.groupEnd();
+            // ──────────────────────────────────────────────────────────────
+
             if (data && data.activeOrder) {
                 var order = data.activeOrder;
                 window.APP.activeOrder = order;
@@ -242,6 +279,22 @@ window.APP = {
         if (!order || !order.status) return;
 
         var status = order.status;
+
+        // ─── DIAGNOSTIC ONLY — DO NOT SHIP TO PRODUCTION ──────────────────
+        console.group('[DIAGNOSTIC] renderOrderState() called');
+        console.log('order.status value     :', status);
+        console.log('Type of status         :', typeof status);
+        var _knownActive = ['SEARCHING', 'ACCEPTED', 'PICKING_UP', 'ARRIVED', 'ON_RIDE', 'BUYING', 'DELIVERING'];
+        var _knownPayment = ['WAITING_PAYMENT'];
+        var _knownDone = ['COMPLETED', 'CANCELLED', 'EXPIRED'];
+        console.log('Matches WAITING_PAYMENT:', _knownPayment.includes(status));
+        console.log('Matches ACTIVE statuses:', _knownActive.includes(status), '→', _knownActive.join(', '));
+        console.log('Matches TERMINAL status:', _knownDone.includes(status));
+        if (!_knownPayment.includes(status) && !_knownActive.includes(status) && !_knownDone.includes(status)) {
+            console.error('❌ STATUS NOT RECOGNISED — renderOrderState will exit silently with no UI change. Received:', JSON.stringify(status));
+        }
+        console.groupEnd();
+        // ──────────────────────────────────────────────────────────────────
 
 
         if (status === 'WAITING_PAYMENT') {
