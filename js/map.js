@@ -218,8 +218,10 @@ window.APP_MAP = {
                 }
             }
 
-            dr.setDirections(result);
+            // Set route index SEBELUM setDirections — cegah timing issue
+            // dimana DR render rute 0 dulu sebelum index dipilih
             dr.setRouteIndex(shortestIndex);
+            dr.setDirections(result);
 
             console.log('[ROUTE] travelMode=' + travelMode + ' | alternatives=' + result.routes.length + ' | selected #' + shortestIndex + ' = ' + shortestDist + 'm');
 
@@ -654,9 +656,9 @@ function initMap() {
 
         ds = new google.maps.DirectionsService();
         dr = new google.maps.DirectionsRenderer({
-            suppressMarkers: false,
-            preserveViewport: true,
-            polylineOptions: { strokeColor: '#4285F4', strokeWeight: 5 }
+            suppressMarkers: true,       // custom markers dihandle manual — DR jangan dobel
+            preserveViewport: false,     // DR auto-zoom ke rute saat setDirections
+            polylineOptions: { strokeColor: '#4285F4', strokeWeight: 5, strokeOpacity: 0.85 }
         });
         dr.setMap(map);
         window.APP.directionsRenderer = dr;
