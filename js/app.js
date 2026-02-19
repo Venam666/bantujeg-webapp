@@ -419,17 +419,16 @@ window.APP = {
     },
 
     processOrder: async function () {
-        if (window.APP._isSubmittingOrder) {
-            console.warn("[ORDER] Duplicate submit prevented.");
-            return;
-        }
+        // 1. Immediate Lock
+        if (window.APP._isSubmittingOrder) return;
         window.APP._isSubmittingOrder = true;
-        window.APP.closeConfirmModal();
 
+        // 2. Immediate UI Feedback
+        window.APP.closeConfirmModal();
         var btn = document.getElementById('btn-submit');
         if (btn) {
-            btn.classList.add('loading');
             btn.disabled = true;
+            btn.classList.add('loading');
         }
 
         try {
@@ -442,6 +441,7 @@ window.APP = {
                 response = await window.APP.createCashOrder();
             }
 
+            // Response validation
             if (!response) throw new Error('No response from server');
             if (response.error) throw new Error(response.error);
             if (!response.success && response.message) throw new Error(response.message);
@@ -453,8 +453,14 @@ window.APP = {
             console.error('[ORDER] Submit failed:', e);
             if (window.showToast) window.showToast('Gagal membuat order: ' + e.message);
         } finally {
+            // 3. Guaranteed Unlock
             window.APP._isSubmittingOrder = false;
-            if (btn) btn.disabled = false;
+
+            // 4. Guaranteed UI Reset
+            if (btn) {
+                btn.disabled = false;
+                btn.classList.remove('loading');
+            }
             window.APP.updateSubmitButton();
         }
     },
@@ -624,14 +630,20 @@ window.APP = {
             body: JSON.stringify(payload)
         });
 
+        // Strict 429 Handling
         if (res.status === 429) {
-            console.warn("[ORDER] Rate limited on create.");
-            throw new Error("Terlalu banyak request. Tunggu sebentar.");
+            throw new Error("Terlalu banyak permintaan. Mohon tunggu sebentar.");
         }
 
+        // Strict Error Handling (No JSON parse on non-OK)
+        if (!res.ok) {
+            throw new Error('Server Error: ' + res.status);
+        }
+
+        // Only parse JSON if 2xx
         var text = await res.text();
         try { return JSON.parse(text); }
-        catch (e) { throw new Error('Server Error: ' + res.status); }
+        catch (e) { throw new Error('Invalid JSON response'); }
     },
 
     // ─── QRIS MODAL ──────────────────────────────────────────────────────────
@@ -703,7 +715,13 @@ window.updateLink = function () { window.APP.updateSubmitButton(); };
 window.submitOrder = function () { window.APP.submitOrder(); };
 window.openConfirmModal = function () { window.APP.openConfirmModal(); };
 window.closeConfirmModal = function () { window.APP.closeConfirmModal(); };
-window.processOrder = function () { window.APP.processOrder(); };
+window._lastProcessOrder = 0;
+window.processOrder = function () {
+    var now = Date.now();
+    if (now - window._lastProcessOrder < 1000) return; // 1s Debounce
+    window._lastProcessOrder = now;
+    window.APP.processOrder();
+};
 window.selectPayment = function (method, el) {
     document.getElementById('payment-method-input').value = method;
     var cards = document.querySelectorAll('.payment-card');
