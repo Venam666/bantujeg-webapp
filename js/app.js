@@ -141,13 +141,36 @@ window.APP = {
     },
 
     // ─── BACKEND SYNC ────────────────────────────────────────────────────────
-    fetchActiveOrder: async function () {
-        if (window.APP._isFetchingOrder) return;
+    fetchActiveOrder: async function (forceBust) {
+        if (window.APP._isFetchingOrder && !forceBust) return;
         window.APP._isFetchingOrder = true;
         try {
-            var res = await fetch((window.API_URL || 'http://localhost:3000') + '/orders/active', {
-                headers: window.APP_AUTH.getAuthHeaders()
+            var apiUrl = (window.API_URL || 'http://localhost:3000');
+            var url = apiUrl + '/orders/active';
+
+            // Force cache bust if requested (e.g. after receiving 304)
+            if (forceBust) {
+                url += (url.indexOf('?') === -1 ? '?' : '&') + 't=' + Date.now();
+            }
+
+            var res = await fetch(url, {
+                method: 'GET',
+                headers: Object.assign({}, window.APP_AUTH.getAuthHeaders(), {
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache'
+                }),
+                cache: 'no-store'
             });
+
+            // ─── STRICT 304 HANDLING ──────────────────────────────────────────
+            // If browser returns 304 (from disk cache), IT IS WRONG.
+            // We must force a fresh fetch from server.
+            if (res.status === 304) {
+                console.warn('[ORDERS] 304 Not Modified detected. Retrying with cache buster...');
+                window.APP._isFetchingOrder = false; // Allow re-entry
+                return window.APP.fetchActiveOrder(true);
+            }
+            // ─────────────────────────────────────────────────────────────────
 
             if (res.status === 429) {
                 console.warn('[ORDERS] 429 rate limited. Skipping this tick.');
@@ -222,6 +245,7 @@ window.APP = {
         if (!order || !order.status) return;
 
         var status = order.status;
+
 
         if (status === 'WAITING_PAYMENT') {
             window.APP.uiState = 'WAITING_PAYMENT';
@@ -432,6 +456,7 @@ window.APP = {
         }
 
         try {
+
             var method = document.getElementById('payment-method-input').value || 'CASH';
             var response = null;
 
@@ -443,6 +468,8 @@ window.APP = {
 
             // Response validation
             if (!response) throw new Error('No response from server');
+
+
             if (response.error) throw new Error(response.error);
             if (!response.success && response.message) throw new Error(response.message);
 
