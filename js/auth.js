@@ -36,12 +36,29 @@ window.APP_AUTH = {
         if (loginView) loginView.style.display = 'none';
         if (mainView) mainView.style.display = 'block';
 
-        // Trigger map resize when showing main view to prevent gray box
+        // CRITICAL: #view-main was display:none when initMap() ran.
+        // The #map div had zero dimensions — Google Maps initialised into a
+        // zero-size container, so DirectionsRenderer cannot paint the polyline.
+        // Triggering 'resize' after the view becomes visible forces Maps to
+        // re-measure the container and re-render any pending directions result.
+        //
+        // Two-stage: immediate + 300ms to cover both fast and slow paint paths.
+        if (window.APP && window.APP.map && window.google && window.google.maps) {
+            google.maps.event.trigger(window.APP.map, 'resize');
+        }
         setTimeout(function () {
-            if (window.APP && window.APP.map) {
+            if (window.APP && window.APP.map && window.google && window.google.maps) {
                 google.maps.event.trigger(window.APP.map, 'resize');
+                // If a route was already calculated while view was hidden,
+                // re-render it now that the map has real dimensions.
+                if (window.APP.directionsRenderer) {
+                    var dirs = window.APP.directionsRenderer.getDirections();
+                    if (dirs && dirs.routes && dirs.routes.length > 0) {
+                        window.APP.directionsRenderer.setDirections(dirs);
+                    }
+                }
             }
-        }, 100);
+        }, 300);
     },
 
     // --- Clear identity (logout or expired session) ---

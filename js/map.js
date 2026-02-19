@@ -616,7 +616,25 @@ window.addEventListener('popstate', function (event) {
 // setService('RIDE') is called exactly ONCE, here, after map is ready.
 function initMap() {
     console.log('[initMap] Google Maps API ready. Starting sole initialization sequence.');
-    if (!document.getElementById('map')) return;
+    var mapEl = document.getElementById('map');
+    if (!mapEl) return;
+
+    // CRITICAL: #view-main may be display:none when initMap() fires (auth not yet resolved).
+    // If #map has zero clientHeight, Google Maps creates a broken instance —
+    // DirectionsRenderer receives valid directions but cannot paint the polyline
+    // onto a zero-size canvas, rendering only the dotted straight-line between markers.
+    // Defer construction until the container has real pixel dimensions.
+    if (mapEl.clientHeight === 0) {
+        console.log('[initMap] #map has zero height — deferring until container is visible.');
+        var _waitForVisible = setInterval(function () {
+            if (mapEl.clientHeight > 0) {
+                clearInterval(_waitForVisible);
+                console.log('[initMap] #map now visible (' + mapEl.clientHeight + 'px). Resuming.');
+                initMap();
+            }
+        }, 50);
+        return;
+    }
 
     try {
         var mapSettings = window.APP_MAP.getServiceMapSettings('RIDE');
