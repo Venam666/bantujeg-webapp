@@ -682,12 +682,26 @@ window.APP = {
         var countdownEl = document.getElementById('qris-countdown');
 
         if (amountEl && modal) {
-            amountEl.innerText = 'Rp ' + (order.payment.expected_amount).toLocaleString('id-ID');
+            // Use qris_amount or total_amount if available, fallback to expected_amount
+            var showAmount = order.payment.qris_amount || order.payment.total_amount || order.payment.expected_amount || 0;
+            amountEl.innerText = 'Rp ' + (showAmount).toLocaleString('id-ID');
             modal.classList.add('active');
             var backdrop = document.getElementById('modal-backdrop');
             if (backdrop) backdrop.classList.add('active');
 
-            window.APP._startQrisCountdown(15 * 60, countdownEl);
+            // Expiration Logic
+            var expiredAt = order.payment.expired_at || (Date.now() + 15 * 60 * 1000); // Fallback if missing
+            var remainingSeconds = Math.floor((expiredAt - Date.now()) / 1000);
+            if (remainingSeconds < 0) remainingSeconds = 0;
+
+            window.APP._startQrisCountdown(remainingSeconds, countdownEl);
+
+            // Dev Simulation Button
+            var simBtn = document.getElementById('btn-simulate-pay');
+            if (simBtn) {
+                var isDev = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+                simBtn.style.display = isDev ? 'block' : 'none';
+            }
         }
     },
 
@@ -765,6 +779,35 @@ window.finishQrisPayment = async function () {
         window.APP.openQrisModal(order);
     } else {
         window.APP.closeQrisModal();
+    }
+};
+
+window.simulatePaymentDev = async function () {
+    if (!window.APP.activeOrder) return;
+    var order = window.APP.activeOrder;
+    var orderId = order.orderId || order.id;
+    var amount = order.payment.qris_amount || order.payment.total_amount || order.payment.expected_amount;
+
+    if (!confirm('Simulasi bayar Rp ' + amount + ' untuk Order ' + orderId + '?')) return;
+
+    try {
+        var apiUrl = (window.API_URL || 'http://localhost:3000');
+        var res = await fetch(apiUrl + '/dev/payment/simulate-paid', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderId: orderId, amount: amount })
+        });
+
+        var data = await res.json();
+        if (data.success) {
+            alert('Simulasi Sukses! Order status: ' + data.newStatus);
+            window.APP.fetchActiveOrder();
+            window.APP.closeQrisModal();
+        } else {
+            alert('Simulasi Gagal: ' + (data.error || 'Unknown error'));
+        }
+    } catch (e) {
+        alert('Error: ' + e.message);
     }
 };
 

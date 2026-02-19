@@ -322,7 +322,8 @@
                 alt="QRIS Code">
 
             <p style="font-size:14px; color:#666; margin-bottom:8px;">Total Bayar</p>
-            <h2 id="qris-amount" style="margin:0 0 16px 0; color:#10B981; font-size:24px; font-weight:800;">Rp 0</h2>
+            <h2 id="qris-amount" style="margin:0 0 4px 0; color:#10B981; font-size:24px; font-weight:800;">Rp 0</h2>
+            <p style="font-size:12px; color:#64748B; margin:0 0 16px 0;">*Nominal sudah termasuk 3 digit kode unik</p>
 
             <div
                 style="background:#FFFFEB; color:#B45309; padding:8px; border-radius:8px; font-size:12px; margin-bottom:24px; display:inline-block; width:100%;">
@@ -337,6 +338,13 @@
             <button id="btn-qris-cancel" class="btn-secondary" style="width:100%; color:#EF4444; border-color:#FECACA;"
                 onclick="cancelQrisPayment()">
                 Batalkan & Revisi
+            </button>
+
+            <!-- DEV ONLY -->
+            <button id="btn-simulate-pay" class="btn-secondary" 
+                style="width:100%; margin-top:12px; border-color:#dbeafe; background:#eff6ff; color:#2563eb; display:none;" 
+                onclick="simulatePaymentDev()">
+                🧪 Simulasi Bayar (Dev)
             </button>
         </div>
     </div>
