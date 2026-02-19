@@ -126,17 +126,41 @@ window.APP_MAP = {
     // ─── ROUTING ─────────────────────────────────────────────────────────────
     drawRoute: function () {
         if (!map || !ds || !dr) return;
+
+        // GUARD: Ensure Google Maps API is fully loaded
+        if (!google || !google.maps || !google.maps.TravelMode) {
+            console.error('[MAP] Google Maps API not ready or missing TravelMode');
+            return;
+        }
+
         var origin = window.APP.places.origin;
         var dest = window.APP.places.dest;
-        if (!origin || !dest) return;
+
+        // GUARD: Strict check for place geometry
+        if (!origin || !origin.geometry || !origin.geometry.location) {
+            // invalid origin, just return silently or log debug
+            return;
+        }
+        if (!dest || !dest.geometry || !dest.geometry.location) {
+            // invalid dest, wait for user
+            return;
+        }
 
         window.APP_MAP.setLoading(true);
         document.getElementById('error-card').style.display = 'none';
 
-        var serviceKey = window.APP.service;
-        var travelMode = serviceKey === 'CAR' || serviceKey === 'CAR_XL'
+        var serviceKey = window.APP.service || 'RIDE'; // Fail-safe default
+        var isCar = (serviceKey === 'CAR' || serviceKey === 'CAR_XL');
+        var travelMode = isCar
             ? google.maps.TravelMode.DRIVING
-            : google.maps.TravelMode.TWO_WHEELER;
+            : (google.maps.TravelMode.TWO_WHEELER || google.maps.TravelMode.DRIVING);
+
+        // GUARD: Ensure travelMode is valid
+        if (!travelMode) {
+            console.error('[MAP] Invalid TravelMode for service:', serviceKey);
+            window.APP_MAP.setLoading(false);
+            return;
+        }
 
         ds.route({
             origin: origin.geometry.location,
