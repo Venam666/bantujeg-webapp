@@ -180,29 +180,34 @@ window.APP_MAP = {
                 return;
             }
 
-            // ✅ Find SHORTEST route among alternatives
-            if (result.routes && result.routes.length > 1) {
-                result.routes.sort(function (a, b) {
-                    var distA = a.legs.reduce(function (sum, leg) { return sum + leg.distance.value; }, 0);
-                    var distB = b.legs.reduce(function (sum, leg) { return sum + leg.distance.value; }, 0);
-                    return distA - distB;
-                });
+            // ✅ Find SHORTEST route index among alternatives
+            var shortestIndex = 0;
+            var shortestDist = Infinity;
+
+            if (result.routes && result.routes.length > 0) {
+                for (var i = 0; i < result.routes.length; i++) {
+                    var dist = result.routes[i].legs.reduce(function (sum, leg) { return sum + leg.distance.value; }, 0);
+                    if (dist < shortestDist) {
+                        shortestDist = dist;
+                        shortestIndex = i;
+                    }
+                }
             }
 
-            // ✅ Render ONLY the shortest route — strip alternatives
-            var shortestOnly = {
-                geocoded_waypoints: result.geocoded_waypoints,
-                routes: [result.routes[0]]
-            };
-            dr.setDirections(shortestOnly);
+            // ✅ Render the original result directly (Prevents 'travelMode' crash)
+            dr.setDirections(result);
+
+            // ✅ Set the index of the shortest route
+            dr.setRouteIndex(shortestIndex);
+
             console.log('[ROUTE] Alternatif tersedia:', result.routes.length,
-                '| Dipilih: rute terpendek =', result.routes[0].legs[0].distance.value, 'm');
+                '| Dipilih: route index', shortestIndex, '=', shortestDist, 'm');
 
-            if (result.routes[0] && result.routes[0].bounds) {
-                map.fitBounds(result.routes[0].bounds, { padding: 60 });
+            if (result.routes[shortestIndex] && result.routes[shortestIndex].bounds) {
+                map.fitBounds(result.routes[shortestIndex].bounds, { padding: 60 });
             }
 
-            var leg = result.routes[0].legs[0];
+            var leg = result.routes[shortestIndex].legs[0];
             var distanceKm = leg.distance.value / 1000;
             var durationMins = Math.ceil(leg.duration.value / 60);
 
