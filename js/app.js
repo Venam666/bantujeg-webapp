@@ -249,7 +249,10 @@ window.APP = {
             window.APP.uiState = 'WAITING_PAYMENT';
             window.APP.lockFormForActiveOrder();
             window.APP.startPolling();
-            if (order.payment && order.payment.expected_amount > 0) {
+            var isQris = (order.paymentMethod === 'QRIS') ||
+                (order.payment && order.payment.method === 'QRIS');
+            var hasAmount = order.payment && order.payment.expected_amount > 0;
+            if (isQris && hasAmount) {
                 window.openQrisModal(order);
             }
             return;
@@ -713,6 +716,8 @@ window.APP = {
         if (order.status !== 'WAITING_PAYMENT') return;
         if (!order.payment) return;
         if (!order.payment.expected_amount || order.payment.expected_amount <= 0) return;
+        var method = order.paymentMethod || (order.payment && order.payment.method) || '';
+        if (method !== 'QRIS') return;
 
         var amountEl = document.getElementById('qris-amount');
         var modal = document.getElementById('modal-qris');
