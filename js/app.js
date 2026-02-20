@@ -301,6 +301,18 @@ window.APP = {
     unlockForm: function () {
         var inputs = document.querySelectorAll('#view-main input, #view-main select, #view-main textarea');
         inputs.forEach(function (el) { el.disabled = false; });
+
+        // Reset Payment to CASH
+        var payInput = document.getElementById('payment-method-input');
+        if (payInput) payInput.value = 'CASH';
+
+        var cards = document.querySelectorAll('.payment-card');
+        cards.forEach(function (c) { c.classList.remove('selected'); });
+
+        var firstCard = document.querySelector('.payment-card');
+        if (firstCard) firstCard.classList.add('selected');
+
+        window.APP.updateSubmitButton();
     },
 
     // ─── STATUS CARD ─────────────────────────────────────────────────────────
