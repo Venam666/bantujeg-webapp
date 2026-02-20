@@ -249,10 +249,11 @@ window.APP = {
             window.APP.uiState = 'WAITING_PAYMENT';
             window.APP.lockFormForActiveOrder();
             window.APP.startPolling();
-            var isQris = (order.paymentMethod === 'QRIS') ||
-                (order.payment && order.payment.method === 'QRIS') ||
-                (order.payment && order.payment.paymentMethod === 'QRIS') ||
-                (order.status === 'WAITING_PAYMENT' && order.payment && order.payment.expected_amount > 0);
+            var isQris =
+                order.status === 'WAITING_PAYMENT' &&
+                order.payment &&
+                order.payment.method !== 'CASH' &&
+                order.payment.expected_amount > 0;
             var hasAmount = order.payment && order.payment.expected_amount > 0;
             if (isQris && hasAmount) {
                 window.openQrisModal(order);
@@ -724,10 +725,7 @@ window.APP = {
         if (!order.payment) return;
         if (!order.payment.expected_amount || order.payment.expected_amount <= 0) return;
 
-        var method = order.paymentMethod
-            || (order.payment && order.payment.method)
-            || (order.payment && order.payment.paymentMethod)
-            || '';
+        var method = (order.payment && order.payment.method) || 'CASH';
         if (method === 'CASH') return;
 
         var amountEl = document.getElementById('qris-amount');
