@@ -194,6 +194,7 @@ window.APP = {
                 window.APP.renderOrderState(order);
             } else {
                 window.APP.activeOrder = null;
+                localStorage.removeItem('bj_active_order_id');
                 window.APP.hideStatusCard();
                 window.APP.unlockForm();
                 window.APP.updateSubmitButton();
