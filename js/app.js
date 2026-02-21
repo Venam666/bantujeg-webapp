@@ -269,6 +269,7 @@ window.APP = {
         }
 
         if (['COMPLETED', 'CANCELLED', 'EXPIRED'].includes(status)) {
+            localStorage.removeItem('bj_active_order_id');
             window.APP.activeOrder = null;
             window.APP.uiState = 'IDLE';
             window.APP.stopPolling();
@@ -283,7 +284,10 @@ window.APP = {
     startPolling: function () {
         if (!window.APP._pollingTimer) {
             window.APP._pollingTimer = setInterval(async function () {
-                if (!window.APP.activeOrder) { window.APP.stopPolling(); return; }
+                // Only stop if we have no saved orderId either (truly no active order)
+                if (!window.APP.activeOrder && !localStorage.getItem('bj_active_order_id')) {
+                    window.APP.stopPolling(); return;
+                }
                 if (document.hidden) return;
                 await window.APP.fetchActiveOrder();
             }, window.APP._pollingInterval);
@@ -513,8 +517,19 @@ window.APP = {
             if (response.error) throw new Error(response.error);
             if (!response.success && response.message) throw new Error(response.message);
 
-            await window.APP.fetchActiveOrder();
-            if (window.APP.activeOrder) window.APP.startPolling();
+            var orderId = response.orderId || response.order_id || response.id || null;
+            if (!orderId) throw new Error('Order dibuat tapi ID tidak ditemukan');
+
+            localStorage.setItem('bj_active_order_id', orderId);
+
+            // Show immediate feedback without waiting for fetchActiveOrder
+            window.APP.showStatusCard({
+                status: 'SEARCHING',
+                orderId: orderId
+            });
+
+            // Then start polling to get real data
+            window.APP.startPolling();
 
         } catch (e) {
             console.error('[ORDER] Submit failed:', e);
@@ -874,4 +889,13 @@ document.addEventListener('visibilitychange', function () {
 
 // DOMContentLoaded: only boots auth recovery (fetchActiveOrder).
 // Does NOT call setService — that happens in initMap() after the map is ready.
-document.addEventListener('DOMContentLoaded', window.APP.initApp);
+document.addEventListener('DOMContentLoaded', function () {
+    window.APP.initApp();
+
+    var savedOrderId = localStorage.getItem('bj_active_order_id');
+    if (savedOrderId) {
+        // User reloaded with active order - show status immediately
+        window.APP.showStatusCard({ status: 'SEARCHING', orderId: savedOrderId });
+        window.APP.startPolling();
+    }
+});
