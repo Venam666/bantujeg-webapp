@@ -171,7 +171,12 @@ window.APP = {
             // ─────────────────────────────────────────────────────────────────
 
             if (res.status === 429) {
-                console.warn('[ORDERS] 429 rate limited. Skipping this tick.');
+                window.APP._pollingInterval = Math.min(
+                    (window.APP._pollingInterval || 7000) * 2, 30000
+                );
+                console.warn('[ORDERS] 429 — slowing poll to', window.APP._pollingInterval, 'ms');
+                window.APP.stopPolling();
+                window.APP.startPolling(); // restart with new interval
                 return;
             }
 
@@ -188,6 +193,7 @@ window.APP = {
             }
 
             var data = await res.json();
+            window.APP._pollingInterval = 7000;
             if (data && data.activeOrder) {
                 var order = data.activeOrder;
                 window.APP.activeOrder = order;
@@ -351,8 +357,8 @@ window.APP = {
             orderIdText.innerText = id ? ('ID Order: ' + id.substring(0, 8).toUpperCase()) : '';
         }
 
-        var cancellableStatuses = ['SEARCHING', 'ACCEPTED', 'PICKING_UP', 'ARRIVED'];
-        if (cancelBtn) cancelBtn.style.display = cancellableStatuses.includes(order.status) ? 'block' : 'none';
+        // Cancel button completely removed from UI and logic
+
 
         window.APP.lockFormForActiveOrder();
 
@@ -377,73 +383,8 @@ window.APP = {
         if (bottomBar) bottomBar.style.display = '';
     },
 
-    // ─── CUSTOMER CANCEL ─────────────────────────────────────────────────────
-    cancelActiveOrder: async function () {
-        var order = window.APP.activeOrder;
-        if (!order) return;
-        var orderId = order.orderId || order.order_id || order.id;
-        if (!orderId) { if (window.showToast) window.showToast('ID order tidak ditemukan'); return; }
+    // Cancel logic completely removed as customer cancels only via WA bot
 
-        var cancelBtn = document.getElementById('order-cancel-btn');
-        if (cancelBtn) { cancelBtn.disabled = true; cancelBtn.innerText = '⏳ Membatalkan...'; }
-
-        try {
-            var apiUrl = (window.API_URL || 'http://localhost:3000');
-            var res = await fetch(apiUrl + '/orders/cancel', {
-                method: 'POST',
-                headers: Object.assign({ 'Content-Type': 'application/json' }, window.APP_AUTH.getAuthHeaders()),
-                body: JSON.stringify({ orderId: orderId, reason: 'Customer cancel' })
-            });
-
-            if (res.status === 429) {
-                console.warn('Cancel rate-limited');
-                if (window.showToast) window.showToast('Terlalu banyak request, tunggu sebentar.');
-                return;
-            }
-
-            var data = await res.json();
-            if (data && (data.success || data.idempotent)) {
-                if (window.showToast) window.showToast('Order dibatalkan.');
-            } else {
-                if (window.showToast) window.showToast(data.message || 'Gagal membatalkan order');
-            }
-        } catch (e) {
-            if (window.showToast) window.showToast('Gagal membatalkan: ' + e.message);
-        } finally {
-            if (window.APP._pollingTimer) {
-                setTimeout(function () {
-                    window.APP.fetchActiveOrder();
-                }, 1200);
-            } else {
-                await window.APP.fetchActiveOrder();
-            }
-            if (cancelBtn) { cancelBtn.disabled = false; cancelBtn.innerText = 'Batalkan Order'; }
-            window.APP.closeCancelConfirmModal();
-        }
-    },
-
-    openCancelConfirmModal: function () {
-        var modal = document.getElementById('modal-cancel-confirm');
-        var backdrop = document.getElementById('modal-backdrop');
-        if (modal) modal.classList.add('active');
-        if (backdrop) backdrop.classList.add('active');
-    },
-
-    closeCancelConfirmModal: function () {
-        var modal = document.getElementById('modal-cancel-confirm');
-        var backdrop = document.getElementById('modal-backdrop');
-        if (modal) modal.classList.remove('active');
-        // Only hide backdrop if no other modals are active (checking blindly here effectively hides it, which is desired behavior for simple stack)
-        // But to be safe, we essentially just remove active class. 
-        // Logic detail: if other modals are open, this might hide backdrop for them? 
-        // Existing logic in closeQrisModal simply removes it. So we follow pattern.
-        if (backdrop) backdrop.classList.remove('active');
-    },
-
-    confirmCancelOrder: function () {
-        window.APP.closeCancelConfirmModal();
-        window.APP.cancelActiveOrder();
-    },
 
     // ─── SUBMIT FLOW ─────────────────────────────────────────────────────────
     submitOrder: async function () {
@@ -810,7 +751,8 @@ window.APP = {
 
     cancelQrisPayment: function () {
         window.APP.closeQrisModal();
-        window.APP.cancelActiveOrder();
+        // Cancel Qris disabled via app logic
+
     }
 };
 
@@ -835,11 +777,7 @@ window.selectPayment = function (method, el) {
 };
 window.closeQrisModal = function () { window.APP.closeQrisModal(); };
 window.openQrisModal = function (o) { window.APP.openQrisModal(o); };
-window.cancelActiveOrder = function () { window.APP.cancelActiveOrder(); };
-window.cancelQrisPayment = function () { window.APP.cancelQrisPayment(); };
-window.openCancelConfirmModal = function () { window.APP.openCancelConfirmModal(); };
-window.closeCancelConfirmModal = function () { window.APP.closeCancelConfirmModal(); };
-window.confirmCancelOrder = function () { window.APP.confirmCancelOrder(); };
+
 window.finishQrisPayment = async function () {
     if (window.showToast) window.showToast('⏳ Mengecek pembayaran...');
     await window.APP.fetchActiveOrder();
@@ -884,7 +822,10 @@ window.simulatePaymentDev = async function () {
 // Page Visibility — immediately sync when tab becomes visible again
 document.addEventListener('visibilitychange', function () {
     if (!document.hidden && window.APP.activeOrder && !window.APP._isFetchingOrder) {
-        window.APP.fetchActiveOrder();
+        // Wait 2s before syncing — avoids burst when user switches tabs rapidly
+        setTimeout(function () {
+            if (!document.hidden) window.APP.fetchActiveOrder();
+        }, 2000);
     }
 });
 
